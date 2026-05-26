@@ -1,0 +1,134 @@
+"""CLI entry point for lc-facts-reconcile."""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from datetime import date
+from pathlib import Path
+
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+
+VALID_PLANES = {"library", "applied", "shopify", "captions"}
+VALID_SEVERITIES = {"R0-live", "R0-pending", "drift", "caption-conflict", "internal", "stale-claim"}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="lc-facts-reconcile",
+        description="Diff engine for the LC facts library (Agent 5).",
+    )
+    parser.add_argument(
+        "--only",
+        default=None,
+        help="Comma-separated series handles to scope the run, e.g. bathurst-gasworks,woolla",
+    )
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="Only diff applied records modified since this date (YYYY-MM-DD).",
+    )
+    parser.add_argument(
+        "--planes",
+        default="library,applied,shopify,captions",
+        help="Comma-separated subset of planes to use: library,applied,shopify,captions",
+    )
+    parser.add_argument(
+        "--severity",
+        default=None,
+        help="Filter output to this severity only, e.g. R0-live",
+    )
+    parser.add_argument(
+        "--delta",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Diff current run against the closest previous report on or before this date.",
+    )
+    parser.add_argument(
+        "--linear-comment",
+        action="store_true",
+        help="Post R0-live summary to a Linear issue. Requires --linear-issue.",
+    )
+    parser.add_argument(
+        "--linear-issue",
+        default=None,
+        help="Linear issue ID to comment against (e.g. LOS7-XXX). Required with --linear-comment.",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="Override default report output path.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not write files or post Linear comments.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging.",
+    )
+
+    args = parser.parse_args(argv)
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.linear_comment and not args.linear_issue:
+        parser.error("--linear-comment requires --linear-issue.")
+
+    planes = {p.strip() for p in args.planes.split(",") if p.strip()}
+    unknown_planes = planes - VALID_PLANES
+    if unknown_planes:
+        parser.error(f"Unknown planes: {', '.join(sorted(unknown_planes))}. Valid: {', '.join(sorted(VALID_PLANES))}")
+
+    handles: list[str] | None = None
+    if args.only:
+        handles = [h.strip() for h in args.only.split(",") if h.strip()]
+
+    since_date: date | None = None
+    if args.since:
+        try:
+            since_date = date.fromisoformat(args.since)
+        except ValueError:
+            parser.error(f"--since must be YYYY-MM-DD, got: {args.since}")
+
+    output_path: Path | None = None
+    if args.output:
+        output_path = Path(args.output).expanduser()
+
+    from .runner import run_reconciliation
+
+    result = run_reconciliation(
+        handles=handles,
+        planes=planes,
+        since_date=since_date,
+        severity_filter=args.severity,
+        delta_date=args.delta,
+        linear_comment=args.linear_comment,
+        linear_issue=args.linear_issue,
+        output_path=output_path,
+        dry_run=args.dry_run,
+    )
+
+    print(f"\nReport:      {result.report_path}")
+    print(f"Series:      {result.series_count}")
+    print(f"Products:    {result.product_count}")
+    print(f"Disagreements: {result.disagreement_count} total")
+    for sev, count in sorted(result.by_severity.items()):
+        if count:
+            print(f"  {sev}: {count}")
+    if result.open_claim_count:
+        print(f"Open claims: {result.open_claim_count}")
+    if result.errors:
+        print(f"Errors:      {len(result.errors)}", file=sys.stderr)
+        for err in result.errors[:5]:
+            print(f"  {err}", file=sys.stderr)
+
+    return 1 if any(d.severity == "R0-live" for d in result.disagreements) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
