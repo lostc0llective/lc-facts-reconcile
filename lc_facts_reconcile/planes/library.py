@@ -127,11 +127,13 @@ def _parse_master_entry(handle: str) -> dict[str, str]:
     text = MASTER_FILE.read_text(encoding="utf-8", errors="replace")
     facts: dict[str, str] = {}
 
+    # Require handle to appear backtick-wrapped (table cell) so update-log
+    # mentions like "entry X corrected from Y" in the preamble don't match.
     pattern = re.compile(
-        r"(?i)(?:^|\n).*?" + re.escape(handle) + r".*?(?=\n(?:##|\d+\.|---)|$)",
+        r"(?m)^\|[^\n]*`" + re.escape(handle) + r"`[^\n]*(?:\n(?!\|[^\n]*\|[^\n]*\|).*)*",
         re.DOTALL,
     )
-    m = pattern.search(text[:20000])
+    m = pattern.search(text)
     if not m:
         return facts
 
@@ -141,7 +143,9 @@ def _parse_master_entry(handle: str) -> dict[str, str]:
     if year_m:
         facts["year_range"] = year_m.group(0)
 
-    loc_m = re.search(r"(?i)location[:\s]+([^\n|]{5,80})", block)
+    # Only extract location from a pipe-delimited table row to avoid
+    # matching "location" in prose (e.g. "taken on the drive to a location").
+    loc_m = re.search(r"(?im)^\|\s*\*?\*?location\*?\*?\s*\|\s*([^|\n]{5,80})", block)
     if loc_m:
         facts["location"] = loc_m.group(1).strip()
 
