@@ -55,12 +55,28 @@ def read_library(handle: str) -> LibraryReadResult:
             surface = "research.at_a_glance"
             plane.values[(surface, key)] = val
 
+        # Series-to-metaobject projection (iterate-2, 2026-05-31).
+        # The Shopify plane reads the series metaobject and emits
+        # entries on the `series.metaobject` surface. The library
+        # mirrors every at-a-glance fact onto the same surface so
+        # the diff matcher can compare them structurally without
+        # an LLM fan-out. When the metaobject has no entry for a
+        # given key, _classify yields no finding; when both planes
+        # have an entry, R0-live / drift / R0-pending fires per
+        # the standing severity grade rules in diff.py.
+        for key, val in research_facts.items():
+            plane.values[("series.metaobject", key)] = val
+
         open_claims.extend(_extract_open_claims(handle, text, str(research_file)))
 
     master_facts = _parse_master_entry(handle)
     for key, val in master_facts.items():
         surface = "series.master"
         plane.values[(surface, key)] = val
+        # Same projection rationale as above — _master entries also
+        # mirror onto series.metaobject so the matcher can see them.
+        if ("series.metaobject", key) not in plane.values:
+            plane.values[("series.metaobject", key)] = val
 
     for key, lib_val in master_facts.items():
         if key in research_facts:
@@ -172,18 +188,81 @@ def _extract_open_claims(handle: str, text: str, source_file: str) -> list[OpenC
     return claims
 
 
+_ENRICHMENT_FIELD_PROJECTIONS = {
+    # enrichment-draft field name -> Shopify product metafield key
+    "proposed_subject_description": "subject_description",
+    "proposed_print_story": "print_story",
+    "proposed_origin_line": "origin_line",
+    # legacy flat-shape names kept for back-compat if older drafts surface
+    "subject_description": "subject_description",
+    "print_story": "print_story",
+    "origin_line": "origin_line",
+}
+
+
 def _absorb_enrichment(plane: PlaneData, data: Any, handle: str) -> None:
-    """Pull structured fields from enrichment draft JSON into the library plane."""
+    """Pull structured fields from enrichment-draft JSON into the library plane.
+
+    Enrichment-draft schema (canonical 2026-05-06 IPTC ingestion onwards):
+
+        {
+          "series": "<series-handle>",
+          "facts_library": "R2 verified — ...",
+          "drafts": [
+            {
+              "handle": "<product-handle>",
+              "lr_caption": "...",            # Lightroom IPTC (canonical lives in captions/)
+              "proposed_subject_description": "...",  # draft for Shopify product.subject_description
+              "rule0_notes": "...",
+              "alt_text": "...",              # optional
+              "meta_title": "..."             # optional, seo.title equivalent
+            },
+            ...
+          ]
+        }
+
+    The previous flat-dict reader (`{handle: {field: value}}`) silently
+    dropped every entry because the real shape has `drafts: [...]` at
+    the top level. This was the structural defect behind Agent 5
+    iterate-1's "0 disagreements" outcome on 132 products scanned.
+
+    Output projection: each draft entry's `proposed_*` field is
+    re-keyed to match the Shopify product metafield surface shape —
+    `(product.<handle>, <metafield_key>)` — so the diff matcher's
+    structural compare fires when the draft and the live metafield
+    disagree.
+    """
     if not isinstance(data, dict):
         return
+
+    drafts = data.get("drafts")
+
+    if isinstance(drafts, list):
+        for entry in drafts:
+            if not isinstance(entry, dict):
+                continue
+            product_handle = entry.get("handle")
+            if not product_handle or not isinstance(product_handle, str):
+                continue
+            for src_key, dst_key in _ENRICHMENT_FIELD_PROJECTIONS.items():
+                val = entry.get(src_key)
+                if val and isinstance(val, str):
+                    plane.values[(f"product.{product_handle}", dst_key)] = val
+        return
+
+    # Back-compat: pre-2026-05 enrichment drafts used a flat
+    # `{product_handle: {field: value}}` shape. Read those too so any
+    # legacy drafts still surface; the field-name projection rules
+    # above apply identically.
     for product_handle, product_data in data.items():
         if not isinstance(product_data, dict):
             continue
-        for field_name in ("subject_description", "print_story", "origin_line"):
-            val = product_data.get(field_name)
+        if not isinstance(product_handle, str):
+            continue
+        for src_key, dst_key in _ENRICHMENT_FIELD_PROJECTIONS.items():
+            val = product_data.get(src_key)
             if val and isinstance(val, str):
-                surface = f"enrichment.{field_name}"
-                plane.values[(surface, product_handle)] = val
+                plane.values[(f"product.{product_handle}", dst_key)] = val
 
 
 def list_research_handles() -> list[str]:
