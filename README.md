@@ -79,7 +79,12 @@ lc-facts-reconcile --output=path/to/report.md
 ## Tests
 
 ```
-pytest tests/ -v
+# Default — unit tests only (integration tests skipped via pytest marker)
+pytest
+
+# Include the live Shopify integration test (requires creds)
+op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- \
+  pytest -m integration
 ```
 
-All five spec fixtures (drift, R0-live, caption-conflict, internal, open-claims) plus edge cases.
+All five spec fixtures (drift, R0-live, caption-conflict, internal, open-claims) plus edge cases. The integration suite (`tests/test_shopify_integration.py`) hits the live Shopify Admin API and would have caught the silent-failure bug that shipped 2026-05-26 — the `metafields(identifiers:[...])` PRODUCTS_QUERY shape that the current API rejects. Iterate-1 (2026-05-31) rewrote the query to the singular `metafield(namespace, key)` aliased shape and added `gql()` error guards so any future GraphQL drift surfaces loud instead of silent.

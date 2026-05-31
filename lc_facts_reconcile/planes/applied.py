@@ -9,6 +9,7 @@ Records are treated as "what was applied to live Shopify per LC's own log."
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -16,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from ..diff import PlaneData
+
+logger = logging.getLogger(__name__)
 
 APPLIED_ROOT = Path.home() / "Claude/cowork/tone-of-voice-rollout/applied"
 
@@ -53,7 +56,9 @@ def read_applied(
     since: date | None = None,
 ) -> AppliedReadResult:
     """Walk applied/* and build per-handle PlaneData objects."""
+    logger.debug("read_applied(handles=%s, since=%s) starting", handles, since)
     if not APPLIED_ROOT.exists():
+        logger.debug("read_applied: APPLIED_ROOT does not exist at %s", APPLIED_ROOT)
         return AppliedReadResult(entries=[], plane_by_handle={})
 
     entries: list[AppliedEntry] = []
@@ -82,6 +87,7 @@ def read_applied(
             key = (entry.surface, entry.field)
             plane_by_handle[handle].values[key] = entry.after
 
+    logger.debug("read_applied finished — %d entries across %d handles", len(entries), len(plane_by_handle))
     return AppliedReadResult(entries=entries, plane_by_handle=plane_by_handle)
 
 
