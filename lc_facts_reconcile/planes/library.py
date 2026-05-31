@@ -11,12 +11,15 @@ Sources:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from ..diff import Disagreement, OpenClaim, PlaneData
+
+logger = logging.getLogger(__name__)
 
 FACTS_ROOT = Path.home() / "Claude/cowork/brand-voice/facts-library"
 RESEARCH_ROOT = FACTS_ROOT / "research/locations"
@@ -36,6 +39,7 @@ class LibraryReadResult:
 
 def read_library(handle: str) -> LibraryReadResult:
     """Read all library planes for a series handle."""
+    logger.debug("read_library(handle=%s) starting", handle)
     plane = PlaneData()
     open_claims: list[OpenClaim] = []
     internal_conflicts: list[Disagreement] = []
@@ -85,6 +89,7 @@ def read_library(handle: str) -> LibraryReadResult:
         except (json.JSONDecodeError, OSError):
             pass
 
+    logger.debug("read_library(handle=%s) finished — %d values / %d open claims / %d internal conflicts", handle, len(plane.values), len(open_claims), len(internal_conflicts))
     return LibraryReadResult(
         handle=handle,
         plane=plane,

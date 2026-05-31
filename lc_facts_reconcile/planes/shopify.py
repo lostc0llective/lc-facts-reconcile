@@ -10,6 +10,7 @@ Run via: op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -19,6 +20,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..diff import PlaneData
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_STORE = "lost-collective.myshopify.com"
 API_VERSION = "2024-01"
@@ -84,11 +87,22 @@ def gql(query: str, variables: dict | None = None) -> dict:
         },
         method="POST",
     )
+    logger.debug("Shopify GQL request: query=%s variables=%s", query.split("\n", 2)[1].strip() if "\n" in query else query[:80], variables)
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
-            return json.loads(resp.read().decode())
+            data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Shopify GQL HTTP {e.code}: {e.reason}") from e
+
+    logger.debug("Shopify GQL response: data_keys=%s errors=%s", list((data.get("data") or {}).keys()), data.get("errors"))
+
+    if data.get("errors"):
+        # Field-level GraphQL errors land here, not in HTTPError. Surface loud
+        # so the silent-failure mode that masked the 2026-05-31 PRODUCTS_QUERY
+        # bug never recurs.
+        raise RuntimeError(f"Shopify GQL errors: {data['errors']}")
+
+    return data
 
 
 COLLECTION_QUERY = """
@@ -125,19 +139,13 @@ query ProductsInCollection($handle: String!, $after: String) {
           handle
           bodyHtml
           seo { title description }
-          metafields(identifiers: [
-            {namespace: "custom", key: "print_story"},
-            {namespace: "custom", key: "subject_description"},
-            {namespace: "custom", key: "capture_date"},
-            {namespace: "custom", key: "year_photographed"},
-            {namespace: "custom", key: "origin_line"},
-            {namespace: "custom", key: "camera_body"},
-            {namespace: "custom", key: "lens"},
-          ]) {
-            key
-            value
-            namespace
-          }
+          mf_print_story: metafield(namespace: "custom", key: "print_story") { value }
+          mf_subject_description: metafield(namespace: "custom", key: "subject_description") { value }
+          mf_capture_date: metafield(namespace: "custom", key: "capture_date") { value }
+          mf_year_photographed: metafield(namespace: "custom", key: "year_photographed") { value }
+          mf_origin_line: metafield(namespace: "custom", key: "origin_line") { value }
+          mf_camera_body: metafield(namespace: "custom", key: "camera_body") { value }
+          mf_lens: metafield(namespace: "custom", key: "lens") { value }
           images(first: 5) {
             edges {
               node {
@@ -154,6 +162,16 @@ query ProductsInCollection($handle: String!, $after: String) {
 }
 """
 
+_PRODUCT_METAFIELD_ALIASES = {
+    "mf_print_story": "print_story",
+    "mf_subject_description": "subject_description",
+    "mf_capture_date": "capture_date",
+    "mf_year_photographed": "year_photographed",
+    "mf_origin_line": "origin_line",
+    "mf_camera_body": "camera_body",
+    "mf_lens": "lens",
+}
+
 
 @dataclass
 class ShopifyReadResult:
@@ -165,6 +183,7 @@ class ShopifyReadResult:
 
 def read_shopify(handle: str) -> ShopifyReadResult:
     """Read live Shopify data for a series handle and return a PlaneData."""
+    logger.debug("read_shopify(handle=%s) starting", handle)
     plane = PlaneData()
 
     try:
@@ -172,8 +191,10 @@ def read_shopify(handle: str) -> ShopifyReadResult:
         _read_metaobject(handle, plane)
         product_count = _read_products(handle, plane)
     except Exception as exc:
+        logger.debug("read_shopify(handle=%s) error: %s", handle, exc)
         return ShopifyReadResult(handle=handle, plane=plane, product_count=0, error=str(exc))
 
+    logger.debug("read_shopify(handle=%s) finished — %d products / %d values", handle, product_count, len(plane.values))
     return ShopifyReadResult(handle=handle, plane=plane, product_count=product_count)
 
 
@@ -233,9 +254,10 @@ def _read_products(handle: str, plane: PlaneData) -> int:
             if seo.get("description"):
                 plane.values[(f"product.{ph}", "seo.description")] = seo["description"]
 
-            for mf in node.get("metafields") or []:
+            for alias, key in _PRODUCT_METAFIELD_ALIASES.items():
+                mf = node.get(alias)
                 if mf and mf.get("value"):
-                    plane.values[(f"product.{ph}", mf["key"])] = mf["value"]
+                    plane.values[(f"product.{ph}", key)] = mf["value"]
 
             for img_edge in (node.get("images") or {}).get("edges") or []:
                 img = img_edge.get("node") or {}
