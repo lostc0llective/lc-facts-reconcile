@@ -4,7 +4,7 @@ Agent 5 of the Lost Collective agents programme. Reads four input planes and pro
 
 ## Spec
 
-`~/Claude/cowork/brand-voice/agents-spec-staging/05-facts-library-reconciler.md`
+`~/Claude/cowork/agents/specs/05-facts-library-reconciler.md`
 
 ## What it does
 
