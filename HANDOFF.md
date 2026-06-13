@@ -1,6 +1,6 @@
 # lc-facts-reconcile — HANDOFF
 
-Last updated: 2026-05-31 (iterate-2 — matcher widening shipped).
+Last updated: 2026-06-13. Housekeeping only since iterate-2: a 2026-06-09 commit gitignores .DS_Store; no functional change. Matcher widening (2026-05-31) remains the latest substantive state.
 
 ---
 
