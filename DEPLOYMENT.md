@@ -10,7 +10,7 @@ Launchd test-fire on 2026-05-31: 71 series scanned, 1784 products, **75 R0-live 
 
 Read-only diff engine. **No agent loop, no Anthropic key.** It needs `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` (to mint a Shopify Admin token via OAuth `client_credentials`), and `LINEAR_API_KEY` only for `--linear-comment`. All three are 1Password `op://` references resolved at runtime by `op run --env-file`.
 
-The binding dependency is therefore the **1Password CLI (`op`)** plus the service-account token. `op` exists on the Mac, not in the Cowork sandbox. See `~/Claude/cowork/ai-agents/notes/2026-05-31_sdk-plumbing-pattern.md` ("Execution contexts") for the three-environment model.
+The binding dependency is therefore the **1Password CLI (`op`)** plus the service-account token. `op` exists on the Mac, not in the Cowork sandbox. See `~/Claude/cowork/agents/notes/2026-05-31_sdk-plumbing-pattern.md` ("Execution contexts") for the three-environment model.
 
 ---
 
