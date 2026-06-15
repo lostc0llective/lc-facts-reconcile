@@ -1,6 +1,6 @@
 # lc-facts-reconcile — HANDOFF
 
-Last updated: 2026-06-13. Housekeeping only since iterate-2: a 2026-06-09 commit gitignores .DS_Store; no functional change. Matcher widening (2026-05-31) remains the latest substantive state.
+Last updated: 2026-06-15. Two further doc commits since 2026-06-13: `d85f1fc` added a repo `CLAUDE.md` and fixed a spec pointer (drift-audit str-07/agents-04); `9c14f59` updated `DEPLOYMENT.md` and this `HANDOFF.md` with session WIP notes (LOS7-517 git-hygiene cleanup). No functional code change. Matcher widening (2026-05-31) remains the latest substantive state.
 
 ---
 
