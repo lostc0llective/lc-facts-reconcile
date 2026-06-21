@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 lc-facts-reconcile = "lc_facts_reconcile.cli:main"
+lc-coverage-audit = "lc_facts_reconcile.coverage_cli:main"
 
 [tool.setuptools.packages.find]
 exclude = ["tests*"]
