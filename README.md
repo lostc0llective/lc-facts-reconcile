@@ -4,7 +4,7 @@ Agent 5 of the Lost Collective agents programme. Reads four input planes and pro
 
 ## Spec
 
-`~/Claude/cowork/agents/specs/05-facts-library-reconciler.md`
+No separate spec file — this README is the contract. (The `~/Claude/cowork/agents/specs/` 01-06 set predates Agent 5; slot 05 is the outcome-auditor.)
 
 ## What it does
 
