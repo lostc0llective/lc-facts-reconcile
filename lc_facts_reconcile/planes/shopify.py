@@ -1,7 +1,8 @@
 """Plane 3 — live Shopify metafields.
 
-Uses paginated Admin GraphQL reads. Requires:
-  SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET  (minted via client_credentials)
+Uses paginated Admin GraphQL reads. Requires one of:
+  SHOPIFY_ACCESS_TOKEN                        (Admin-created custom app static token — preferred)
+  SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET  (Partner Dashboard client_credentials fallback)
   SHOPIFY_STORE                               (defaults to lost-collective.myshopify.com)
 
 Run via: op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile
@@ -34,15 +35,22 @@ def get_store() -> str:
 
 
 def get_admin_token() -> str:
-    """Mint a fresh Shopify Admin API token via client_credentials. Cached per process."""
+    """Return a Shopify Admin API token. Uses SHOPIFY_ACCESS_TOKEN if set, else mints via client_credentials. Cached per process."""
     if _cached_token.get("token") and time.time() < _cached_token.get("expires_at", 0):
         return _cached_token["token"]
+
+    # Static Admin token preferred (Admin-created custom app — full scope set incl. read_metaobjects)
+    static = os.environ.get("SHOPIFY_ACCESS_TOKEN", "").strip()
+    if static and not static.startswith("<"):
+        _cached_token["token"] = static
+        _cached_token["expires_at"] = time.time() + 86400
+        return static
 
     client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
     client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
     if not client_id or not client_secret:
         raise RuntimeError(
-            "SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET not set.\n"
+            "SHOPIFY_ACCESS_TOKEN or SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET not set.\n"
             "Run via: op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile"
         )
 
