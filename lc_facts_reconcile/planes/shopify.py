@@ -1,8 +1,11 @@
 """Plane 3 — live Shopify metafields.
 
-Uses paginated Admin GraphQL reads. Requires one of:
-  SHOPIFY_ACCESS_TOKEN                        (Admin-created custom app static token — preferred)
-  SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET  (Partner Dashboard client_credentials fallback)
+Uses paginated Admin GraphQL reads. Auth (LOS7-1230): App A "LC Dashboard
+Data" client-credentials is the canonical path — it mints a 24h token
+carrying read_products / read_metaobjects (verified live 2026-07-07).
+  SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET  (App A client_credentials — canonical)
+  SHOPIFY_ACCESS_TOKEN                        (legacy static token — do NOT reintroduce;
+                                               the old shared one was revoked, LOS7-1211)
   SHOPIFY_STORE                               (defaults to lost-collective.myshopify.com)
 
 Run via: op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile
@@ -39,7 +42,8 @@ def get_admin_token() -> str:
     if _cached_token.get("token") and time.time() < _cached_token.get("expires_at", 0):
         return _cached_token["token"]
 
-    # Static Admin token preferred (Admin-created custom app — full scope set incl. read_metaobjects)
+    # Legacy static-token escape hatch (kept for one-off overrides). Normally unset —
+    # the .env.tpl no longer provides it, so auth falls through to App A client_credentials.
     static = os.environ.get("SHOPIFY_ACCESS_TOKEN", "").strip()
     if static and not static.startswith("<"):
         _cached_token["token"] = static
