@@ -1,4 +1,9 @@
-"""Plane 2 — applied records from tone-of-voice-rollout/applied/.
+"""Plane 2 — applied records from the retired tone-of-voice-rollout project.
+
+The rollout completed 2026-06-26 and its folder was archived to
+~/Claude/archive/tone-of-voice-rollout/ in the 2026-07-07 workspace migration.
+The applied records are frozen history — nothing writes new ones — and this
+plane reads them from the archive location.
 
 Each applied record is a markdown file documenting a field change:
   field, handle(s) affected, before/after values, source cited.
@@ -20,7 +25,7 @@ from ..diff import PlaneData
 
 logger = logging.getLogger(__name__)
 
-APPLIED_ROOT = Path.home() / "Claude/cowork/tone-of-voice-rollout/applied"
+APPLIED_ROOT = Path.home() / "Claude/archive/tone-of-voice-rollout/applied"
 
 _FIELD_MAP: dict[str, str] = {
     "print-story": "print_story",

@@ -1,5 +1,7 @@
 # lc-facts-reconcile (Agent 5)
 
+Pairing: cowork/agents
+
 Diff engine for the LC facts library: reconciles four planes (research files, applied records, live Shopify metafields, IPTC captions) into a structured disagreement report. Sonnet 4.6. Read-only, never writes.
 
 - CLI: `lc-facts-reconcile`. Requires Python 3.11+ and the `op` CLI; run on the local machine, not the Cowork sandbox.
