@@ -11,6 +11,7 @@ Four severity grades (spec 2026-05-26):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -159,7 +160,17 @@ def _values_agree(a: str, b: str) -> bool:
     return _normalise(a) == _normalise(b)
 
 
+_CITATION_TAG_RE = re.compile(r"\[S\d+\]")
+
+
 def _normalise(s: str) -> str:
+    # Strip library-only citation tags ([S3], [S12][S14]) and markdown
+    # bold/italic/code markers before comparing \u2014 the library's raw markdown
+    # carries these, Shopify's plain-text metafield values never do, and
+    # comparing them unstripped produced false-positive R0-live findings on
+    # every cited fact in the library (LOS7-1382, 2026-07-14).
+    s = _CITATION_TAG_RE.sub("", s)
+    s = s.replace("**", "").replace("__", "").replace("`", "")
     s = s.lower().strip()
     s = s.replace("\u2013", "-").replace("\u2014", "-")
     s = " ".join(s.split())

@@ -225,3 +225,65 @@ def test_normalisation_em_dash():
     )
 
     assert result == [], f"Em-dash normalisation failed — got: {result}"
+
+
+# ---------------------------------------------------------------------------
+# Regression LOS7-1382: library citation tags / markdown must not create
+# false-positive R0-live findings against Shopify's plain-text values.
+# ---------------------------------------------------------------------------
+
+def test_citation_tag_normalisation_no_false_positive():
+    library = make_plane(
+        **{
+            "series.metaobject__location": (
+                "Wangi Wangi, western shore of Lake Macquarie, City of Lake "
+                "Macquarie, NSW 2267. Lat -33.0632, Long 151.5708. [S3]"
+            )
+        }
+    )
+    shopify = make_plane(
+        **{
+            "series.metaobject__location": (
+                "Wangi Wangi, western shore of Lake Macquarie, City of Lake "
+                "Macquarie, NSW 2267. Lat -33.0632, Long 151.5708."
+            )
+        }
+    )
+
+    result = compute_disagreements(
+        handle="wangi-power-station",
+        series="Wangi Power Station",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Citation-tag stripping failed — got: {result}"
+
+
+def test_citation_tag_normalisation_multiple_tags_and_bold():
+    library = make_plane(**{"series.metaobject__summary": "**Operated** 1888 to 1987[S1][S2]"})
+    shopify = make_plane(**{"series.metaobject__summary": "Operated 1888 to 1987"})
+
+    result = compute_disagreements(
+        handle="test",
+        series="Test",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Multi-tag/bold stripping failed — got: {result}"
+
+
+def test_citation_tag_normalisation_still_catches_real_drift():
+    library = make_plane(**{"series.metaobject__year_range": "1888-1987 [S3]"})
+    shopify = make_plane(**{"series.metaobject__year_range": "1888-1995"})
+
+    result = compute_disagreements(
+        handle="test",
+        series="Test",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert len(result) == 1, f"Expected a real disagreement to still be caught, got: {result}"
+    assert result[0].severity == "R0-live"
