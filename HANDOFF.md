@@ -1,6 +1,15 @@
 # lc-facts-reconcile — HANDOFF
 
-Last updated: 2026-07-12. Intervening commit since 2026-06-27: `fc939ee` (2026-07-07) was docs-only workspace-migration housekeeping (lc-master-context rename, rollout archive, Pairing header) — no functional change. Prior history: `502712a` ran the LOS7-628 store-wide product metadata coverage and consistency audit; `2766dbc` switched the Shopify auth path to a static Admin Token to bypass the client_credentials scope gap (the first functional change since 2026-06-13); `a156821` hardened `DEPLOYMENT.md` against the 2026-06-23 restoration issues (plist loss, pip-editable breakage, `read_metaobjects` scope failure); `9c747f0` and `fcf5f5d` were spec-pointer and HANDOFF housekeeping. Matcher widening (2026-05-31) remains the latest substantive matcher state. Earlier 2026-06-13 doc commits: `d85f1fc` added a repo `CLAUDE.md` and fixed a spec pointer (drift-audit str-07/agents-04); `9c14f59` updated `DEPLOYMENT.md` and this `HANDOFF.md` with session WIP notes (LOS7-517 git-hygiene cleanup).
+Last updated: 2026-07-13. Intervening commit since 2026-06-27: `fc939ee` (2026-07-07) was docs-only workspace-migration housekeeping (lc-master-context rename, rollout archive, Pairing header) — no functional change. Prior history: `502712a` ran the LOS7-628 store-wide product metadata coverage and consistency audit; `2766dbc` switched the Shopify auth path to a static Admin Token to bypass the client_credentials scope gap (the first functional change since 2026-06-13); `a156821` hardened `DEPLOYMENT.md` against the 2026-06-23 restoration issues (plist loss, pip-editable breakage, `read_metaobjects` scope failure); `9c747f0` and `fcf5f5d` were spec-pointer and HANDOFF housekeeping. Matcher widening (2026-05-31) remains the latest substantive matcher state. Earlier 2026-06-13 doc commits: `d85f1fc` added a repo `CLAUDE.md` and fixed a spec pointer (drift-audit str-07/agents-04); `9c14f59` updated `DEPLOYMENT.md` and this `HANDOFF.md` with session WIP notes (LOS7-517 git-hygiene cleanup).
+
+---
+
+## Built this session (2026-07-13 — LOS7-1382 citation-tag normalisation fix)
+
+- **Root cause fixed**: `_normalise()` in `diff.py` compared raw library markdown (carrying `[S3]`-style citation tags and `**bold**` markers) against Shopify's plain-text metafield values with no stripping. Every cited fact registered as a mismatch — the 2026-07-14 reconciliation report had 170/170 rows graded R0-live, all differing only by trailing citation brackets.
+- **Fix**: `_normalise()` now strips `[S\d+]` citation tags and markdown bold/italic/code markers before the existing case/whitespace/dash normalisation. Commit `616287d`.
+- **Tests**: 3 new regression tests in `test_diff.py` (reproduces the exact wangi-power-station false positive, a multi-tag/bold case, and confirms a real disagreement under a citation tag still surfaces). 78/78 tests pass.
+- **Not verified live**: a full re-run against Shopify to confirm the R0-live count drops from 170 requires this repo's Shopify credentials via `lost-collective-dawn/.env.tpl` — that shared token is the one flagged revoked/dead in the 2026-07-07 CLAUDE.md correction (tracked separately as LOS7-1230, open). Re-run once LOS7-1230 re-points the credential.
 
 ---
 
