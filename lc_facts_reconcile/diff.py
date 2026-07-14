@@ -160,7 +160,14 @@ def _values_agree(a: str, b: str) -> bool:
     return _normalise(a) == _normalise(b)
 
 
-_CITATION_TAG_RE = re.compile(r"\[S\d+\]")
+# Any whole "[Sx ...]" citation bracket, not just a bare numeric id: covers
+# "[S1]", non-numeric ids ("[S-GPS]", "[S-Geo]"), and compound/multi-source
+# refs with page numbers ("[S1; S2 p. 8-9]"). Mirrors the JS sibling's
+# CITATION_BRACKET in prototyping-workbench/lib/metadata-generation/facts-pack.mjs
+# -- confirmed live 2026-07-14 that the narrower \[S\d+\] pattern missed both
+# of these variants (mckillops-bridge's "[S1; S2 p. 8-9]", mount-russell-grain-
+# silo's "[S-GPS][S-Geo]"), leaving them as false-positive R0-live findings.
+_CITATION_TAG_RE = re.compile(r"\[S[-\w]+[^\]]*\]")
 
 
 def _normalise(s: str) -> str:

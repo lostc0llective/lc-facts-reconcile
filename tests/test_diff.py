@@ -352,3 +352,37 @@ def test_trailing_citation_tag_before_final_period_no_dangling_space():
     )
 
     assert result == [], f"Trailing-tag-before-period regression -- got: {result}"
+
+
+# ---------------------------------------------------------------------------
+# Regression: citation regex must match non-numeric ids and compound refs,
+# not just a bare "[Sx]" (found live 2026-07-14: mckillops-bridge,
+# mount-russell-grain-silo).
+# ---------------------------------------------------------------------------
+
+def test_citation_tag_non_numeric_id():
+    library = make_plane(**{"series.metaobject__location": "Mount Russell, NSW 2360 [S-GPS][S-Geo]"})
+    shopify = make_plane(**{"series.metaobject__location": "Mount Russell, NSW 2360"})
+
+    result = compute_disagreements(
+        handle="test",
+        series="Test",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Non-numeric citation id (S-GPS/S-Geo) not stripped -- got: {result}"
+
+
+def test_citation_tag_compound_ref_with_page_number():
+    library = make_plane(**{"series.metaobject__location": "Deddick Valley, Victoria [S1; S2 p. 8-9]"})
+    shopify = make_plane(**{"series.metaobject__location": "Deddick Valley, Victoria"})
+
+    result = compute_disagreements(
+        handle="test",
+        series="Test",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Compound citation ref with page number not stripped -- got: {result}"
