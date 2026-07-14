@@ -174,5 +174,12 @@ def _normalise(s: str) -> str:
     s = s.lower().strip()
     s = s.replace("\u2013", "-").replace("\u2014", "-")
     s = " ".join(s.split())
-    s = s.rstrip(".")
+    # Removing a tag/marker can leave a dangling space before the punctuation
+    # that followed it ("2040 [S12]; on land" -> "2040 ; on land" once the tag
+    # is gone) -- collapse it. Confirmed live 2026-07-14: 4 of 8 residual
+    # R0-live "location" rows post-fix were this exact artifact
+    # (abandoned-bakery, abandoned-shoe-factory, terminus-hotel,
+    # white-bay-power-station), not a real content disagreement.
+    s = re.sub(r"\s+([,;:.!?])", r"\1", s)
+    s = s.rstrip(".").strip()
     return s

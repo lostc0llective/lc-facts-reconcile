@@ -287,3 +287,68 @@ def test_citation_tag_normalisation_still_catches_real_drift():
 
     assert len(result) == 1, f"Expected a real disagreement to still be caught, got: {result}"
     assert result[0].severity == "R0-live"
+
+
+# ---------------------------------------------------------------------------
+# Regression: citation-tag/markdown removal must not leave a dangling space
+# before the punctuation that followed the removed tag/marker.
+# ---------------------------------------------------------------------------
+
+def test_citation_tag_removal_no_dangling_space_before_punctuation():
+    library = make_plane(
+        **{
+            "series.metaobject__location": (
+                "7 Darley Road, Leichhardt, NSW 2040 [S12]; on land originally "
+                "granted to Ensign Hugh Piper in 1811 [S5]"
+            )
+        }
+    )
+    shopify = make_plane(
+        **{
+            "series.metaobject__location": (
+                "7 Darley Road, Leichhardt, NSW 2040; on land originally "
+                "granted to Ensign Hugh Piper in 1811"
+            )
+        }
+    )
+
+    result = compute_disagreements(
+        handle="abandoned-bakery",
+        series="Abandoned Bakery",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Dangling-space-before-punctuation regression -- got: {result}"
+
+
+def test_trailing_citation_tag_before_final_period_no_dangling_space():
+    library = make_plane(
+        **{
+            "series.metaobject__location": (
+                "Corner of Harris Street and John Street, Pyrmont, Sydney, NSW. "
+                "The hotel itself trades as 61 Harris Street; the predecessor "
+                "Coopers Arms occupied 86 Harris Street before crossing the "
+                "street in the 1860s [S1][S2][S9]."
+            )
+        }
+    )
+    shopify = make_plane(
+        **{
+            "series.metaobject__location": (
+                "Corner of Harris Street and John Street, Pyrmont, Sydney, NSW. "
+                "The hotel itself trades as 61 Harris Street; the predecessor "
+                "Coopers Arms occupied 86 Harris Street before crossing the "
+                "street in the 1860s."
+            )
+        }
+    )
+
+    result = compute_disagreements(
+        handle="terminus-hotel",
+        series="Terminus Hotel",
+        library=library,
+        shopify=shopify,
+    )
+
+    assert result == [], f"Trailing-tag-before-period regression -- got: {result}"
