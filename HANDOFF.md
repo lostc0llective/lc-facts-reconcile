@@ -1,5 +1,22 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-07-14 : LOS7-1382 follow-up — live-verified, second bug found and fixed
+
+Ran the fix from 2026-07-13 against live Shopify data (`op run --env-file=lost-collective-dawn/.env.tpl`, App A client-credentials, headless via SA token). Full catalogue: **170 -> 111 R0-live**, in two steps:
+
+- First fix alone (citation-tag/markdown stripping) took 170 -> 115.
+- Live-diffed 5 of the residual "location" rows directly against Shopify (bypassing the report's 80-char truncation) and found a second bug: removing a tag/marker can leave a dangling space before the punctuation that followed it ("2040 [S12]; on land" -> "2040 ; on land"), and `rstrip(".")` can expose a trailing space after stripping a trailing period. Fixed in commit `c3cdb41`: collapse whitespace before punctuation, strip trailing whitespace after the period-strip. Verified against all 4 affected handles (abandoned-bakery, abandoned-shoe-factory, terminus-hotel, white-bay-power-station) -- each now normalises identically to Shopify. 115 -> 111.
+
+**Remaining 111 R0-live, broken down and verified, not just counted:**
+- **107 `subject_description`** -- a separate, pre-existing category: library research prose vs. Shopify's visual photo captions. These were never meant to match verbatim (the tool's own docstring already calls this "semantic backing-detection... a v2 feature"). Out of scope for LOS7-1382; not touched.
+- **4 `location`** -- individually verified as genuine content differences, not artifacts: `ashio-copper-mine` (Shopify names a different sub-locality), `mckillops-bridge` (Shopify has far less detail), `mount-russell-grain-silo` (Shopify has an extra regional descriptor), `the-woolshed` (a "(collection metafield)" editorial annotation in the library text -- a different noise category from citation brackets, a legitimate separate finding if Brett wants it cleaned up later).
+
+Today's report at `_reconciliation/2026/reconciliation-report-2026-07-14.md` now reflects the corrected, live-verified state (regenerated for real, not dry-run).
+
+**Next session priorities:** none outstanding for this fix. If the `the-woolshed`-style "(collection metafield)" annotation pattern recurs elsewhere, it's a distinct, smaller follow-up (not citation brackets) -- scope it separately rather than silently folding into `_normalise()`.
+
+---
+
 Last updated: 2026-07-13. Intervening commit since 2026-06-27: `fc939ee` (2026-07-07) was docs-only workspace-migration housekeeping (lc-master-context rename, rollout archive, Pairing header) — no functional change. Prior history: `502712a` ran the LOS7-628 store-wide product metadata coverage and consistency audit; `2766dbc` switched the Shopify auth path to a static Admin Token to bypass the client_credentials scope gap (the first functional change since 2026-06-13); `a156821` hardened `DEPLOYMENT.md` against the 2026-06-23 restoration issues (plist loss, pip-editable breakage, `read_metaobjects` scope failure); `9c747f0` and `fcf5f5d` were spec-pointer and HANDOFF housekeeping. Matcher widening (2026-05-31) remains the latest substantive matcher state. Earlier 2026-06-13 doc commits: `d85f1fc` added a repo `CLAUDE.md` and fixed a spec pointer (drift-audit str-07/agents-04); `9c14f59` updated `DEPLOYMENT.md` and this `HANDOFF.md` with session WIP notes (LOS7-517 git-hygiene cleanup).
 
 ---
