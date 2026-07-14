@@ -1,5 +1,20 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-07-14 (continued) : LOS7-1382 — third bug found + last 3 real disagreements resolved
+
+Brett asked to resolve the 3 remaining genuine `location` disagreements (ashio-copper-mine, mckillops-bridge, mount-russell-grain-silo), leaving `the-woolshed` alone (confirmed by Brett: a general nature collection with no single location, permanently unresolvable, not a defect).
+
+**Third citation-regex bug found while resolving these:** `_CITATION_TAG_RE` (`\[S\d+\]`) only matched purely-numeric ids. Missed `[S-GPS]`/`[S-Geo]` (non-numeric ids) and compound refs like `[S1; S2 p. 8-9]` -- both already in live use. Broadened to `\[S[-\w]+[^\]]*\]`, mirroring the JS sibling's `CITATION_BRACKET` in `prototyping-workbench/lib/metadata-generation/facts-pack.mjs`. Commit `72f6c02`, 2 new regression tests, 84/84 pass.
+
+**Content resolutions (each verified live before/after):**
+- **ashio-copper-mine** -- the research file had two "At a glance" sections (Tsudō Ore-Dressing Plant, the specific photographed subject, first; Ashio Copper Mine parent operation, wider context, second). The parser picks up the LAST such section as canonical, which was the broader "Ashio, Tochigi Prefecture" location -- but the live Shopify metaobject already correctly used the specific "Tsudō" location matching the actual photographed subject. Corrected the library's second table to match (both are already-sourced facts in the same file; no new claim invented, no Shopify write needed).
+- **mckillops-bridge** -- Shopify's live value was a stub ("Deddick Valley, Australia"). Library had the fuller sourced detail. Pushed a concise version of the library's location text to the live metaobject (`gid://shopify/Metaobject/438040494246`) via `shopify store execute --allow-mutations`, then updated the library text to match exactly what's now live (both sides in sync).
+- **mount-russell-grain-silo** -- Shopify already had richer regional detail ("Inverell Shire, Northern Tablelands") than the library's location field, but that detail was ALREADY sourced elsewhere in the same research file (the "Nearest centres" and "Traditional custodians" rows, [S1][S2][S4][S17], plus an explicit note at [S20] correcting Brett's own loose "central NSW" Facebook caption). Back-propagated it into the library's Location field (no new claim) and pushed the missing postcode ("NSW 2360") to the live metaobject (`gid://shopify/Metaobject/435918930086`) to match.
+
+**Final live-verified state:** full catalogue re-run after all fixes: **108 R0-live** (was 170 at session start). 107 `subject_description` (separate, pre-existing, out-of-scope semantic-backing gap) + 1 `location` (`the-woolshed`, confirmed permanent/expected). Dashboard indexes resynced (`prototyping-workbench` commit `bced0318`) to reflect the corrected research files.
+
+---
+
 ## 2026-07-14 : LOS7-1382 follow-up — live-verified, second bug found and fixed
 
 Ran the fix from 2026-07-13 against live Shopify data (`op run --env-file=lost-collective-dawn/.env.tpl`, App A client-credentials, headless via SA token). Full catalogue: **170 -> 111 R0-live**, in two steps:
