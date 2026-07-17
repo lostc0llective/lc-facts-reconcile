@@ -22,7 +22,10 @@ The binding dependency is therefore the **1Password CLI (`op`)** plus the servic
 
 - sets `PATH` (Python 3.13 framework bin + homebrew + system) and `HOME`
 - sources `OP_SERVICE_ACCOUNT_TOKEN` from `~/.config/op/service-account-token` (so `op run` auths without Touch ID)
-- `cd`s to the repo and `exec`s `op run --env-file=$HOME/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile`
+- `cd`s to the repo and runs `op run --env-file=$HOME/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile`
+- **(LOS7-1520, 2026-07-18)** after the run, auto-commits the dated report: `git -C ~/Claude/cowork/brand-voice add -- facts-library/_reconciliation/<year>` then commits, scoped ONLY to that directory (never `git add -A`), so brand-voice stops re-accumulating uncommitted reconciliation dailies (the load-bearing category behind LOS7-1208 and LOS7-1519). Commit-only, no push — the next interactive session pushes it along with whatever else it's working on; that's fine, the Done-when bar is a clean working tree, not a pushed one. If the report is unchanged from the previous run (no-op re-fire), `git status --porcelain` is empty and the commit step is skipped.
+
+Note: the wrapper no longer `exec`s into the CLI (it needs to run the commit step afterward), so it now captures and re-exits with the CLI's original status code explicitly.
 
 ### plist
 
