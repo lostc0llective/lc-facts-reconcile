@@ -11,6 +11,11 @@ from .planes.library import LibraryReadResult, list_research_handles, read_libra
 from .report import ReportData, RunMetadata, write_report
 
 
+# Above this ratio of handles erroring on the live plane, the run is not a
+# measurement — it is a failure wearing a report's clothes (LOS7-1585).
+SHOPIFY_ERROR_ABORT_RATIO = 0.20
+
+
 @dataclass
 class ReconciliationResult:
     report_path: Path
@@ -22,6 +27,25 @@ class ReconciliationResult:
     by_severity: dict[str, int]
     open_claim_count: int
     errors: list[str]
+    # True when the live plane failed on so many handles that the run cannot be
+    # read as "no findings". Callers MUST treat this as a failed run, not a clean
+    # one. See run_failed below.
+    aborted: bool = False
+    abort_reason: str | None = None
+
+    @property
+    def run_failed(self) -> bool:
+        """A run that read no live data is not a measurement of zero disagreements.
+
+        On 2026-07-08 all 125 Shopify reads died on a latin-1 header encode. The
+        run scanned 0 products, found 0 disagreements and exited 0 — so the only
+        day the exit status looked clean was the day the reconciler was entirely
+        broken. Anything deriving success from this result must consult this."""
+        if self.aborted:
+            return True
+        if self.errors and self.product_count == 0:
+            return True
+        return False
 
 
 def run_reconciliation(
@@ -53,6 +77,10 @@ def run_reconciliation(
     all_open_claims: list[OpenClaim] = []
     errors: list[str] = []
     total_products = 0
+    shopify_errors = 0
+    handles_tried = 0
+    aborted = False
+    abort_reason: str | None = None
 
     for handle in all_handles:
         lib_result: LibraryReadResult = read_library(handle)
@@ -71,11 +99,32 @@ def run_reconciliation(
                 sho = read_shopify(handle)
                 if sho.error:
                     errors.append(f"{handle}: Shopify read error — {sho.error}")
+                    shopify_errors += 1
                 else:
                     shopify_plane = sho.plane
                     total_products += sho.product_count
             except Exception as exc:
                 errors.append(f"{handle}: Shopify read exception — {exc}")
+                shopify_errors += 1
+
+            # Abort rather than grind through every remaining handle emitting the
+            # same error and then writing a report that reads as clean. Only
+            # meaningful once a few handles have been attempted, so a single early
+            # failure on a short run does not trip it.
+            handles_tried += 1
+            if (
+                handles_tried >= 5
+                and shopify_errors / handles_tried > SHOPIFY_ERROR_ABORT_RATIO
+            ):
+                aborted = True
+                abort_reason = (
+                    f"Live (Shopify) plane failed on {shopify_errors} of "
+                    f"{handles_tried} handles attempted "
+                    f"({shopify_errors / handles_tried:.0%} > "
+                    f"{SHOPIFY_ERROR_ABORT_RATIO:.0%} threshold). "
+                    f"First error: {errors[0] if errors else 'unknown'}"
+                )
+                break
 
         captions_plane: PlaneData | None = None
         if use_captions:
@@ -166,6 +215,8 @@ def run_reconciliation(
         by_severity=by_severity,
         open_claim_count=len(all_open_claims),
         errors=errors,
+        aborted=aborted,
+        abort_reason=abort_reason,
     )
 
 
