@@ -161,3 +161,19 @@ Brett approved prefix-only; captions stay opt-in (so LOS7-1587's default is unch
 **Next session priorities**
 1. **LOS7-1588** — decide whether the "project conceit" framing is Brett's own (library gains it, sourced) or generated hedging (comes off live). Recurs across 5 products with variations, which reads as generated, but that is a read not a finding.
 2. Caption-key naming divergence: 46 of 67 caption files have zero correlation to library products (unchanged from above).
+
+---
+
+## 2026-07-20 (cont.) — LOS7-1588/1589: library-side outcome, no reconciler code change
+
+No code change in this repo. Recorded here because it is what the engine now reports.
+
+The 6 R0-live rows the LOS7-1586 trim rule left standing were resolved on the data side (`cowork/brand-voice` commits `ef91dbd`, `e0ed3a0`), and the direction ran BOTH ways:
+- **hotel-motel-101 (5 products)** — live was wrong: subject_description asserted the series title is "a project conceit", framed against the count. Stripped from live via `metafieldsSet`.
+- **jamison-hotel and bathurst-gasworks-purifier-shed-roof** — the LIBRARY was wrong. Bathurst's live text is verbatim Brett's IPTC caption; captions are Tier 1 and override, so the library entry was aligned to it.
+
+**Root cause:** the LOS7-182 correction of 2026-05-15 landed only in `research/locations/hotel-motel-101.md`. `series/_master.md` and the enrichment draft's `.facts_library` blob (fed straight to copy generation) still carried "the actual count is 102 motels" and "Chain motels excluded" for two months. LOS7-1589 tracks a deterministic cross-layer check.
+
+**Verified:** live scoped run, hotel-motel-101 + bathurst-gasworks, 125 products, **R0-live 6 -> 0**, exit 0.
+
+Note the validation of LOS7-1587: bathurst is textbook `caption-conflict`, the grade that repair made reachable. With a working captions plane it would have surfaced as a caption conflict rather than hiding inside an R0-live row.
