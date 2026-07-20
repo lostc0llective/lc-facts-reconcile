@@ -108,3 +108,37 @@ Key code locations:
 - `lc_facts_reconcile/planes/shopify.py` — singular metafield aliases (iterate-1) + gql errors guard.
 - `lc_facts_reconcile/diff.py` — six severity grades + caption-wins precedence.
 - `tests/test_matcher_widening.py` — 9 new iterate-2 tests.
+
+---
+
+## 2026-07-20 — LOS7-1585 + LOS7-1587: fail-closed, captions plane repaired, dead planes de-scoped
+
+Both from the LOS7-1571 sweep triage.
+
+**LOS7-1585 — fail closed (commit `6ec0348`).** On 2026-07-08 all 125 Shopify reads died on a latin-1 header encode; the run scanned 0 products, wrote a clean-looking report and **exited 0**. `diff.py` gates the R0-live branch on `sho_val is not None`, so a wholesale live-plane failure makes R0-live unreachable by construction — deriving the exit status from the R0-live count alone guaranteed total failure looked like success. Unnoticed 12 days.
+- `ReconciliationResult.run_failed` (errors + 0 products, or explicit abort). `cli.py` returns **exit 3** on it, checked BEFORE the R0-live test. 3 not 2 — argparse owns 2 (see DEPLOYMENT.md exit-code table).
+- Runner aborts once the live plane fails on >20% of handles attempted (min 5 tried).
+- `planes/shopify.py::_assert_header_safe()` validates the token at the single point it is obtained. Reports only THAT it is malformed and how many bad chars — never the char, position, or any part of the value (the original urllib error leaked a credential char into the log). Test asserts no leak.
+- `~/.claude/scripts/lc-facts-reconcile-scheduled.sh` was auto-committing the report regardless of status; now labels a failed run's commit `FAILED RUN — not a measurement (exit 3)`. Still commits it — the 07-08 report on disk is what made this diagnosable.
+
+**LOS7-1587 — captions repaired, precedence fixed, planes de-scoped (commit `8241bb6`).** All 3,762 graded rows ever produced were R0-live; applied+captions were `(none)` on every one while headers advertised four planes.
+- Captions had TWO stacked bugs: parser iterated the export's TOP level (manufacturing values from `series_handle`/`generated_at`) instead of the payload under `captions`; and keyed them `("captions.iptc", stem)`, which `diff.py` can never correlate. Now `("product.<handle>-<slug>", "subject_description")`, joined via `f"{handle}-{caption_key}"`. Covers 20/21 wangi, 5/5 kinugawa.
+- **Precedence was the dangerous one.** `_classify` tested caption-conflict first with an early return. With captions repaired that would have demoted **102 of 162** live R0-live rows, headline 162 -> ~60, reading as improvement while hiding 63% of live Rule-0 exposure. Live now grades first, never demoted; a row that is both emits BOTH. Verified all 162 preserved. No test covered this — there are now four.
+- Default planes now `library,shopify`. Report header reports planes that CONTRIBUTED, not those requested.
+- `applied` documented unusable: regex-scrapes retired tone-of-voice-rollout prose, extracts junk handles (`'links (5 → 15 total). lc-map placeholder HTML comment in the Now section.'`). `drift`/`R0-pending` stay unreachable. `stale-claim` defined but never assigned.
+- Captions stays OPT-IN: enabling adds ~299 findings vs 24 agreements, mostly two valid descriptions of the same photo. Editorial call, not a code one.
+
+Suite 91 -> 98 tests (`tests/test_fail_closed.py`, `tests/test_captions_plane.py`).
+
+**Brett-actions** — ONE. LOS7-1586 is gated on a Rule 0 semantics decision (below).
+
+**Next session priorities**
+1. **LOS7-1586 — awaiting Brett's go.** Verified 21 of 51 rows against live Shopify: **19 = live is a strict PREFIX of library** (remediation trimmed trailing series boilerplate), **0 add text**, 2 genuinely divergent. R0-live means "live carries a claim the library doesn't back", so a trim CANNOT create exposure — ~90% of the +51 are false positives of exact-string matching. Both directions the issue proposed are wrong: updating the library would DELETE real sourced facts ("one of 101 New South Wales roadside motels ... across 2018"); re-pushing would reintroduce the boilerplate LOS7-1401/1402 removed. Proposed fix: treat a live value that is a strict prefix of the library value as not-R0-live. **Prefix-only, NOT substring** — a negation in a library sentence could wrongly clear a contradicting live claim. Real findings that survive: `hotel-motel-101-appin-motel` (live adds "titled as a project conceit but") and `bathurst-gasworks-purifier-shed-roof`.
+2. Caption-key naming divergence: 46 of 67 caption files have ZERO correlation to library products. `hotel-motel-101` covers 5/49 because caption keys carry location suffixes (`3-explorers-motel-katoomba`) the product handles lack. Worth its own issue if the plane should fully cover.
+3. Whether the token that broke 2026-07-08 is still malformed — not checked (requires reading the credential). The next scheduled run will now say so loudly instead of exiting 0.
+
+**Decisions made**
+- Exit 3, not 2, for a failed run — argparse owns 2.
+- Live exposure always outranks caption-conflict; both emitted rather than one replacing the other.
+- Captions and applied opt-in rather than deleted — honest de-scope over false coverage.
+- Stopped at the LOS7-1586 gate rather than changing Rule 0 grading semantics unilaterally.
