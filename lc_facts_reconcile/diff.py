@@ -102,6 +102,40 @@ def compute_disagreements(
         if d:
             results.append(d)
 
+        # A caption conflict and a live Rule-0 exposure are DIFFERENT findings
+        # needing different actions, and a row can legitimately be both. Emit the
+        # caption conflict alongside, never instead of, the live grade.
+        #
+        # This matters: when the captions plane was repaired (LOS7-1587) the
+        # original precedence — caption-conflict tested first, early return —
+        # would have reclassified 102 of the 162 live R0-live rows into
+        # caption-conflict. The headline would have fallen 162 -> ~60 and read as
+        # a large improvement while actually hiding 63% of live Rule-0 exposure
+        # behind a quieter grade. Masking live exposure is exactly the
+        # false-green failure this engine exists to prevent.
+        if (
+            d is not None
+            and d.severity != "caption-conflict"
+            and cap_val is not None
+            and lib_val is not None
+            and not _values_agree(cap_val, lib_val)
+        ):
+            results.append(
+                Disagreement(
+                    severity="caption-conflict",
+                    series=series,
+                    handle=handle,
+                    surface=surface,
+                    field=field_name,
+                    library_says=lib_val or "(no entry)",
+                    applied_says=app_val,
+                    shopify_says=sho_val,
+                    caption_says=cap_val,
+                    resolution_rule=_RESOLUTION_RULES["caption-conflict"],
+                    recommended_action=_RECOMMENDED_ACTIONS["caption-conflict"],
+                )
+            )
+
     return results
 
 
@@ -127,13 +161,20 @@ def _classify(
     if lib_val is None and cap_val is None:
         return None
 
-    if cap_val is not None and lib_val is not None and not _values_agree(cap_val, lib_val):
-        severity = "caption-conflict"
-    elif sho_val is not None and lib_val is not None and not _values_agree(sho_val, lib_val):
+    # LIVE EXPOSURE IS TESTED FIRST AND ALWAYS WINS THE PRIMARY GRADE.
+    # Caption-conflict used to be tested first with an early return, which was
+    # harmless only while the captions plane was silently empty. Once it was
+    # repaired (LOS7-1587) that ordering would have demoted 102 of 162 live
+    # R0-live rows to caption-conflict. A wrong fact on the public site outranks
+    # an internal caption/library disagreement, so R0-live/drift is graded first;
+    # compute_disagreements appends any caption-conflict as a SEPARATE finding.
+    if sho_val is not None and lib_val is not None and not _values_agree(sho_val, lib_val):
         if app_val is not None and _values_agree(app_val, sho_val):
             severity = "drift"
         else:
             severity = "R0-live"
+    elif cap_val is not None and lib_val is not None and not _values_agree(cap_val, lib_val):
+        severity = "caption-conflict"
     elif app_val is not None and lib_val is not None and not _values_agree(app_val, lib_val) and sho_val is None:
         severity = "R0-pending"
 
