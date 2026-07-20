@@ -168,7 +168,14 @@ def _classify(
     # R0-live rows to caption-conflict. A wrong fact on the public site outranks
     # an internal caption/library disagreement, so R0-live/drift is graded first;
     # compute_disagreements appends any caption-conflict as a SEPARATE finding.
-    if sho_val is not None and lib_val is not None and not _values_agree(sho_val, lib_val):
+    if (
+        sho_val is not None
+        and lib_val is not None
+        and not _values_agree(sho_val, lib_val)
+        # A live value that is the library value with a trailing tail removed
+        # states nothing the library does not back, so it is not R0-live.
+        and not _live_is_trim_of_library(sho_val, lib_val)
+    ):
         if app_val is not None and _values_agree(app_val, sho_val):
             severity = "drift"
         else:
@@ -199,6 +206,44 @@ def _classify(
 def _values_agree(a: str, b: str) -> bool:
     """Normalised comparison — ignores dash variants, case, extra whitespace."""
     return _normalise(a) == _normalise(b)
+
+
+# A live value shorter than this is treated as a stub, not a deliberate trim, and
+# is never cleared by the prefix rule below.
+_MIN_TRIM_PREFIX_CHARS = 20
+
+
+def _live_is_trim_of_library(live: str, library: str) -> bool:
+    """True when the live value is the library value with a trailing tail removed.
+
+    R0-live means "live carries a claim the library does not back". A live value
+    that is a strict prefix of the library value asserts nothing new, so it is
+    not Rule 0 exposure — it is the same statement, stopping earlier.
+
+    This exists because the LOS7-1401/1402 slop remediation trimmed trailing
+    series boilerplate off live subject_description ("... Part of the Tin City
+    series.", "... It is one of 101 New South Wales roadside motels Brett Patman
+    photographed across 2018."). Comparing with exact equality then flagged all
+    51 trimmed products as R0-live on 2026-07-15 — a 90%-false-positive spike
+    while the site had in fact got safer (LOS7-1586). Verified against live
+    Shopify: of 21 rows sampled, 19 were strict prefixes and 0 added any text.
+
+    PREFIX ONLY, never general substring containment (Brett's call, 2026-07-20).
+    Substring would let a library sentence carrying a negation clear a live claim
+    that contradicts it — "did not close in 1990" contains "close in 1990".
+
+    The tail must break at a word boundary, so a mid-word truncation
+    ("... ran until 199" against "... ran until 1990") is still graded.
+    """
+    nl, nb = _normalise(live), _normalise(library)
+    if not nl or len(nl) < _MIN_TRIM_PREFIX_CHARS:
+        return False
+    if nl == nb or not nb.startswith(nl):
+        return False
+    tail = nb[len(nl):]
+    # Boundary check: the library must continue with punctuation or a space, not
+    # with more of the word the live value stopped inside.
+    return not tail[:1].isalnum()
 
 
 # Any whole "[Sx ...]" citation bracket, not just a bare numeric id: covers
