@@ -80,9 +80,37 @@ def get_admin_token() -> str:
     if not token:
         raise RuntimeError(f"No access_token in Shopify response: {data}")
 
+    _assert_header_safe(token)
+
     _cached_token["token"] = token
     _cached_token["expires_at"] = time.time() + expires_in - 60
     return token
+
+
+def _assert_header_safe(token: str) -> None:
+    """Fail loudly, once, on a token that cannot go in an HTTP header.
+
+    urllib encodes header values as latin-1. On 2026-07-08 the access token
+    contained an em dash, so every one of 125 per-handle requests raised
+    UnicodeEncodeError, the run scanned 0 products and still exited 0
+    (LOS7-1585). Validating at the single point the token is obtained turns 125
+    identical downstream failures into one clear message at the source.
+
+    Deliberately reports only THAT the token is malformed and how many bad
+    characters it has — never the character, its position, or any part of the
+    token value. The original urllib error leaked a character of the credential
+    into the log; this must not."""
+    try:
+        token.encode("latin-1")
+    except UnicodeEncodeError:
+        bad = sum(1 for ch in token if ord(ch) > 0xFF)
+        raise RuntimeError(
+            f"Shopify access token is not a valid HTTP header value: it contains "
+            f"{bad} non-latin-1 character(s) and cannot be sent. The token value "
+            f"is almost certainly malformed (a smart quote or dash picked up from "
+            f"a copy-paste). Re-read it from 1Password and check for stray "
+            f"punctuation. Token value intentionally not logged."
+        ) from None
 
 
 def gql(query: str, variables: dict | None = None) -> dict:

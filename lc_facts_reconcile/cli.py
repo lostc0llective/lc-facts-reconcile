@@ -127,6 +127,24 @@ def main(argv: list[str] | None = None) -> int:
         for err in result.errors[:5]:
             print(f"  {err}", file=sys.stderr)
 
+    # Exit 3 = the run FAILED and its numbers mean nothing. This must be checked
+    # before the R0-live test: a wholesale live-plane failure makes R0-live
+    # unreachable by construction (diff.py gates it on `sho_val is not None`), so
+    # deriving the status from the R0-live count alone made total failure exit 0 —
+    # the one green day in the series was the completely broken one (LOS7-1585).
+    # 3, not 2: argparse already owns 2 for usage errors (see DEPLOYMENT.md).
+    if result.run_failed:
+        reason = result.abort_reason or (
+            f"{len(result.errors)} error(s) and 0 products scanned"
+        )
+        print(f"\nRUN FAILED: {reason}", file=sys.stderr)
+        print(
+            "Exit 3 — this run is NOT a measurement of zero disagreements. "
+            "Do not read its report as clean.",
+            file=sys.stderr,
+        )
+        return 3
+
     return 1 if any(d.severity == "R0-live" for d in result.disagreements) else 0
 
 

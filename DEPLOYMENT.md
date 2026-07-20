@@ -88,7 +88,18 @@ Expected: ~3 min wall time, ~$0. A fresh `_reconciliation/<year>/reconciliation-
 
 ### Exit codes (read before treating a non-zero exit as a failure)
 
-`lc-facts-reconcile` exits **1 when any R0-live finding exists** (a CI-style signal), 0 when there are none, and 2 on an argparse error. The catalogue routinely carries R0-live drift, so a **daily exit code of 1 in `launchctl list` is EXPECTED** and means the report was written with findings — not a crash. Genuine failures (auth, network, GraphQL) surface in the `.err` log. There is no `KeepAlive` on this job, so a non-zero exit never triggers a respawn.
+| exit | meaning |
+|---|---|
+| 0 | ran successfully, no R0-live findings |
+| 1 | ran successfully, R0-live findings exist (CI-style signal) |
+| 2 | argparse usage error |
+| 3 | **the run FAILED — its numbers are meaningless** (LOS7-1585) |
+
+The catalogue routinely carries R0-live drift, so a **daily exit code of 1 in `launchctl list` is EXPECTED** and means the report was written with findings — not a crash. There is no `KeepAlive` on this job, so a non-zero exit never triggers a respawn.
+
+**Exit 3 is the one that matters.** It fires when the live plane failed on more than 20% of handles, or when the run logged errors and scanned 0 products. Before this existed the reconciler failed OPEN: on 2026-07-08 all 125 Shopify reads died on a latin-1 header encode, so it scanned 0 products, produced 0 disagreements, wrote a report that read as clean, and **exited 0**. Because `diff.py` gates the R0-live branch on `sho_val is not None`, a wholesale live-plane failure makes R0-live unreachable by construction — so the only day the exit status looked clean was the day the reconciler was entirely broken. It went unnoticed for 12 days.
+
+**Never treat a report from an exit-3 run as a measurement.** A run that read no live data is not a finding of "no disagreements". The reliability sweep (`~/Claude/scheduled/facts-library-reliability-sweep/`) independently rejects any report with 0 products scanned or non-zero scan errors, so such a run is excluded from the R0-live trend rather than scored as zero.
 
 ---
 
