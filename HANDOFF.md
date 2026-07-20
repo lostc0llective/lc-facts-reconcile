@@ -130,10 +130,10 @@ Both from the LOS7-1571 sweep triage.
 
 Suite 91 -> 98 tests (`tests/test_fail_closed.py`, `tests/test_captions_plane.py`).
 
-**Brett-actions** — ONE. LOS7-1586 is gated on a Rule 0 semantics decision (below).
+**Brett-actions** — NONE. (LOS7-1586's gate was answered same session: prefix-only approved, captions stay opt-in.)
 
 **Next session priorities**
-1. **LOS7-1586 — awaiting Brett's go.** Verified 21 of 51 rows against live Shopify: **19 = live is a strict PREFIX of library** (remediation trimmed trailing series boilerplate), **0 add text**, 2 genuinely divergent. R0-live means "live carries a claim the library doesn't back", so a trim CANNOT create exposure — ~90% of the +51 are false positives of exact-string matching. Both directions the issue proposed are wrong: updating the library would DELETE real sourced facts ("one of 101 New South Wales roadside motels ... across 2018"); re-pushing would reintroduce the boilerplate LOS7-1401/1402 removed. Proposed fix: treat a live value that is a strict prefix of the library value as not-R0-live. **Prefix-only, NOT substring** — a negation in a library sentence could wrongly clear a contradicting live claim. Real findings that survive: `hotel-motel-101-appin-motel` (live adds "titled as a project conceit but") and `bathurst-gasworks-purifier-shed-roof`.
+1. ~~LOS7-1586 — DONE (commit `8df28d1`).~~ Original note kept for context: Verified 21 of 51 rows against live Shopify: **19 = live is a strict PREFIX of library** (remediation trimmed trailing series boilerplate), **0 add text**, 2 genuinely divergent. R0-live means "live carries a claim the library doesn't back", so a trim CANNOT create exposure — ~90% of the +51 are false positives of exact-string matching. Both directions the issue proposed are wrong: updating the library would DELETE real sourced facts ("one of 101 New South Wales roadside motels ... across 2018"); re-pushing would reintroduce the boilerplate LOS7-1401/1402 removed. Proposed fix: treat a live value that is a strict prefix of the library value as not-R0-live. **Prefix-only, NOT substring** — a negation in a library sentence could wrongly clear a contradicting live claim. Real findings that survive: `hotel-motel-101-appin-motel` (live adds "titled as a project conceit but") and `bathurst-gasworks-purifier-shed-roof`.
 2. Caption-key naming divergence: 46 of 67 caption files have ZERO correlation to library products. `hotel-motel-101` covers 5/49 because caption keys carry location suffixes (`3-explorers-motel-katoomba`) the product handles lack. Worth its own issue if the plane should fully cover.
 3. Whether the token that broke 2026-07-08 is still malformed — not checked (requires reading the credential). The next scheduled run will now say so loudly instead of exiting 0.
 
@@ -142,3 +142,22 @@ Suite 91 -> 98 tests (`tests/test_fail_closed.py`, `tests/test_captions_plane.py
 - Live exposure always outranks caption-conflict; both emitted rather than one replacing the other.
 - Captions and applied opt-in rather than deleted — honest de-scope over false coverage.
 - Stopped at the LOS7-1586 gate rather than changing Rule 0 grading semantics unilaterally.
+
+
+---
+
+## 2026-07-20 (cont.) — LOS7-1586 closed: a trimmed live value is not Rule 0 exposure
+
+Brett approved prefix-only; captions stay opt-in (so LOS7-1587's default is unchanged).
+
+**Built** (commit `8df28d1`): `diff.py::_live_is_trim_of_library()`. A live value that is a strict PREFIX of the library value asserts nothing the library doesn't back, so it is no longer graded R0-live. Three guards: prefix-only (never substring — "did not close in 1990" CONTAINS "close in 1990", so substring would clear a contradicting claim); word-boundary check (mid-word truncation "ran until 199" vs "ran until 1990" stays graded); 20-char floor (a stub metafield is not a deliberate trim). 11 tests, suite 109.
+
+**Verified against LIVE Shopify**, scoped run over the 8 affected series, `--output` to a temp path so it could not overwrite the dated report: 389 products, **R0-live 56 -> 6**. Both rows predicted from the 21-row sample survived, plus 4 unsampled.
+
+**Filed LOS7-1588** for the 6 survivors — they are one coherent cluster: live asserts the Hotel Motel 101 title is "a project conceit" and that chain-branded properties are included, neither in the research file. Plus `bathurst-gasworks-purifier-shed-roof` (genuine divergence, not a trim).
+
+**Note for whoever runs the reconciler manually:** use `--output` to a temp path. `report.py` names by date with no run id, so a manual run silently overwrites that day's scheduled report — this is how the 2026-07-14 06:43 run (R0-live 169) was replaced on disk by the 11:08 manual run (108). Recorded on LOS7-1585.
+
+**Next session priorities**
+1. **LOS7-1588** — decide whether the "project conceit" framing is Brett's own (library gains it, sourced) or generated hedging (comes off live). Recurs across 5 products with variations, which reads as generated, but that is a read not a finding.
+2. Caption-key naming divergence: 46 of 67 caption files have zero correlation to library products (unchanged from above).
