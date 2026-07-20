@@ -60,7 +60,10 @@ def run_reconciliation(
     dry_run: bool = False,
 ) -> ReconciliationResult:
     if planes is None:
-        planes = {"library", "applied", "shopify", "captions"}
+        # library + shopify only. 'applied' and 'captions' are opt-in — see
+        # LOS7-1587 and the --planes help text. Defaulting to all four is what
+        # made every report advertise four planes while two supplied nothing.
+        planes = {"library", "shopify"}
 
     all_handles = handles or _discover_handles()
 
@@ -81,6 +84,8 @@ def run_reconciliation(
     handles_tried = 0
     aborted = False
     abort_reason: str | None = None
+    # Which planes actually supplied at least one value this run (LOS7-1587).
+    planes_with_data: set[str] = set()
 
     for handle in all_handles:
         lib_result: LibraryReadResult = read_library(handle)
@@ -91,6 +96,8 @@ def run_reconciliation(
         applied_plane: PlaneData | None = None
         if applied_results and handle in applied_results.plane_by_handle:
             applied_plane = applied_results.plane_by_handle[handle]
+            if applied_plane.values:
+                planes_with_data.add("applied")
 
         shopify_plane: PlaneData | None = None
         if use_shopify:
@@ -103,6 +110,8 @@ def run_reconciliation(
                 else:
                     shopify_plane = sho.plane
                     total_products += sho.product_count
+                    if shopify_plane.values:
+                        planes_with_data.add("shopify")
             except Exception as exc:
                 errors.append(f"{handle}: Shopify read exception — {exc}")
                 shopify_errors += 1
@@ -133,6 +142,8 @@ def run_reconciliation(
                 cap = read_captions(handle)
                 if cap:
                     captions_plane = cap.plane
+                    if captions_plane.values:
+                        planes_with_data.add("captions")
             except Exception as exc:
                 errors.append(f"{handle}: captions read exception — {exc}")
 
@@ -160,12 +171,25 @@ def run_reconciliation(
     if handles:
         trigger = f"scoped ({', '.join(handles)})"
 
+    # Report what actually CONTRIBUTED, not what was requested. Every report ever
+    # written advertised "applied, captions, library, shopify" purely because all
+    # four were requested by default, while applied and captions supplied `(none)`
+    # on all 3,762 graded rows — so three of six severity grades were
+    # unreachable and the header said otherwise (LOS7-1587).
+    planes_contributed = sorted(
+        p for p in planes if p in planes_with_data or p == "library"
+    )
+    # NOT appended to `errors`: that list drives run_failed, and a legitimate
+    # library-only run scans 0 products, so pushing a warning there would make an
+    # intentional run self-report as failed.
+    planes_requested_empty = sorted(planes - set(planes_contributed))
+
     metadata = RunMetadata(
         run_date=run_date,
         trigger=trigger,
         series_scanned=len(all_handles),
         products_scanned=total_products,
-        planes_used=sorted(planes),
+        planes_used=planes_contributed,
         since_date=since_date.isoformat() if since_date else None,
         handles_scoped=handles or [],
         errors=errors,
