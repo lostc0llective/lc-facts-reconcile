@@ -1,5 +1,21 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-08-01 — LOS7-1857: stopped daily churn on informationless reports (commit `cdac779`)
+
+`write_report()` unconditionally created `reconciliation-report-YYYY-MM-DD.md` on every launchd run. Filed and premise-checked in `prototyping-workbench` first: measured 2026-07-21 through 2026-07-31, every report was exactly 44002 bytes and consecutive days differed by exactly one line (`**Run date:**`). Two committed files a day apart, zero information. **Decided source of the fix is here, not the downstream index** — the downstream `content/facts-library*.index.json` files in prototyping-workbench derive `reportDate` from the filename, so churn there is a symptom, not the defect.
+
+**Fix:** `write_report()` now strips the run-date line and compares against the most recent existing report in the same year directory. If content matches, it returns the existing report's path instead of writing a new one — no new file, no new commit. `--delta` bypasses this (`skip_if_unchanged=False`) because it appends a section to the returned path after the fact, and appending to a reused historical file would corrupt it. An explicit `--output` always writes regardless.
+
+4 new tests (`tests/test_report_dedup.py`), suite 109 -> 113, full suite green.
+
+**Not touched:** dawn's `banned_terms.json` cross-repo write — LOS7-1857 premise-checked that separately and found it innocent (content-comparison guard already added 2026-06-11, `74ee6104`). That half of the issue was just a stale committed hash, fixed via a dawn PR, not a reconciler change.
+
+**Aside, out of scope for LOS7-1857:** today's run (2026-08-01) shows R0-live jumping 104 -> 172 across several series (ansto-hifar, ashio-copper-mine, awaba-colliery and others) — a genuine content change, not churn, so the new dedup logic correctly did not suppress it. Worth its own look; not investigated here.
+
+**Brett-actions** — NONE.
+
+---
+
 ## 2026-07-14 (continued) : LOS7-1382 — third bug found + last 3 real disagreements resolved
 
 Brett asked to resolve the 3 remaining genuine `location` disagreements (ashio-copper-mine, mckillops-bridge, mount-russell-grain-silo), leaving `the-woolshed` alone (confirmed by Brett: a general nature collection with no single location, permanently unresolvable, not a defect).
