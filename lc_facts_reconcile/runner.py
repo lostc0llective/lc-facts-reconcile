@@ -212,7 +212,11 @@ def run_reconciliation(
             delta_section = f"\n\n## Delta\n\nNo previous report found for {delta_date}.\n"
 
     if not dry_run:
-        final_path = write_report(report_data, output_path)
+        # --delta appends a section to final_path after the fact, so the
+        # unchanged-report reuse in write_report (LOS7-1857) must not fire
+        # here — appending would mutate a previously-committed historical
+        # report instead of today's.
+        final_path = write_report(report_data, output_path, skip_if_unchanged=not delta_date)
         if delta_date and "delta_section" in dir():
             existing = final_path.read_text(encoding="utf-8")
             final_path.write_text(existing + "\n" + delta_section, encoding="utf-8")

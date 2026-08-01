@@ -144,9 +144,50 @@ def _count_by_severity(disagreements: list[Disagreement]) -> dict[str, int]:
     return counts
 
 
-def write_report(data: ReportData, output_path: Path | None = None) -> Path:
+def _strip_run_date(content: str) -> str:
+    """Drop the one line that always differs run-to-run (LOS7-1857).
+
+    Every other line in a report is a function of the findings; only
+    "**Run date:**" carries a timestamp. Comparing reports with this line
+    stripped tells us whether the findings actually changed.
+    """
+    return "\n".join(
+        line for line in content.splitlines() if not line.startswith("**Run date:**")
+    )
+
+
+def _latest_existing_report(path: Path) -> Path | None:
+    """Most recent report file already on disk in `path`'s year directory, if any."""
+    year_dir = path.parent
+    if not year_dir.exists():
+        return None
+    candidates = sorted(
+        (p for p in year_dir.glob("reconciliation-report-*.md") if p != path),
+        reverse=True,
+    )
+    return candidates[0] if candidates else None
+
+
+def write_report(
+    data: ReportData,
+    output_path: Path | None = None,
+    skip_if_unchanged: bool = True,
+) -> Path:
     path = output_path or default_report_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
     content = render_report(data)
+
+    # A new dated file every day whose findings are byte-identical to
+    # yesterday's is pure churn: two committed files differing only in a
+    # timestamp, for zero information (LOS7-1857). Skip the write and hand
+    # back the existing report instead. Only applies to the default dated
+    # path — an explicit --output always writes what it's told to.
+    if skip_if_unchanged and output_path is None:
+        previous = _latest_existing_report(path)
+        if previous is not None:
+            previous_content = previous.read_text(encoding="utf-8", errors="replace")
+            if _strip_run_date(previous_content) == _strip_run_date(content):
+                return previous
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path
