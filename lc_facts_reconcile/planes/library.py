@@ -37,8 +37,13 @@ class LibraryReadResult:
     research_file_exists: bool
 
 
-def read_library(handle: str) -> LibraryReadResult:
-    """Read all library planes for a series handle."""
+def read_library(handle: str, applied_plane: PlaneData | None = None) -> LibraryReadResult:
+    """Read all library planes for a series handle.
+
+    applied_plane, when given, is that same series' PlaneData from
+    planes.applied.read_applied() — passed in so enrichment-draft absorption
+    can check it (see _absorb_enrichment's supersession note, LOS7-1929).
+    """
     logger.debug("read_library(handle=%s) starting", handle)
     plane = PlaneData()
     open_claims: list[OpenClaim] = []
@@ -101,7 +106,7 @@ def read_library(handle: str) -> LibraryReadResult:
     if enrichment_file.exists():
         try:
             data = json.loads(enrichment_file.read_text(encoding="utf-8"))
-            _absorb_enrichment(plane, data, handle)
+            _absorb_enrichment(plane, data, handle, applied_plane)
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -200,7 +205,12 @@ _ENRICHMENT_FIELD_PROJECTIONS = {
 }
 
 
-def _absorb_enrichment(plane: PlaneData, data: Any, handle: str) -> None:
+def _absorb_enrichment(
+    plane: PlaneData,
+    data: Any,
+    handle: str,
+    applied_plane: PlaneData | None = None,
+) -> None:
     """Pull structured fields from enrichment-draft JSON into the library plane.
 
     Enrichment-draft schema (canonical 2026-05-06 IPTC ingestion onwards):
@@ -231,6 +241,19 @@ def _absorb_enrichment(plane: PlaneData, data: Any, handle: str) -> None:
     `(product.<handle>, <metafield_key>)` — so the diff matcher's
     structural compare fires when the draft and the live metafield
     disagree.
+
+    SUPERSESSION (LOS7-1929): an enrichment-draft is Layer 3 pre-audit
+    staging — nothing re-generates it once a later, more authoritative
+    factual audit (e.g. LOS7-1864/1870) corrects and applies different text
+    straight to Shopify. When applied_plane already carries a value for the
+    exact (product.<handle>, dst_key) surface this draft would otherwise
+    project, the draft's claim is stale by construction and is skipped
+    rather than absorbed. Confirmed live: ashio-copper-mine-crusher's
+    enrichment draft (2026-05-09) still held the pre-audit "cone crusher"
+    wording three months after LOS7-1870 (2026-07-31) applied a corrected
+    "crusher" wording to Shopify — comparing the stale draft against live
+    read as an unbacked live claim (R0-live) when live was in fact correct
+    and the draft was the only thing out of date.
     """
     if not isinstance(data, dict):
         return
@@ -246,7 +269,7 @@ def _absorb_enrichment(plane: PlaneData, data: Any, handle: str) -> None:
                 continue
             for src_key, dst_key in _ENRICHMENT_FIELD_PROJECTIONS.items():
                 val = entry.get(src_key)
-                if val and isinstance(val, str):
+                if val and isinstance(val, str) and not _superseded(applied_plane, product_handle, dst_key):
                     plane.values[(f"product.{product_handle}", dst_key)] = val
         return
 
@@ -261,8 +284,15 @@ def _absorb_enrichment(plane: PlaneData, data: Any, handle: str) -> None:
             continue
         for src_key, dst_key in _ENRICHMENT_FIELD_PROJECTIONS.items():
             val = product_data.get(src_key)
-            if val and isinstance(val, str):
+            if val and isinstance(val, str) and not _superseded(applied_plane, product_handle, dst_key):
                 plane.values[(f"product.{product_handle}", dst_key)] = val
+
+
+def _superseded(applied_plane: PlaneData | None, product_handle: str, dst_key: str) -> bool:
+    """True when a later applied record already covers this exact surface."""
+    if applied_plane is None:
+        return False
+    return (f"product.{product_handle}", dst_key) in applied_plane.values
 
 
 def list_research_handles() -> list[str]:
