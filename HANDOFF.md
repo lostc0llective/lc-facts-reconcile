@@ -1,5 +1,26 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-08-04 — LOS7-1929: applied plane rewritten, rejoins the default; closes the LOS7-1912 diagnosis (commit `77b77d3`)
+
+Picks up the "worth its own look" note at the bottom of the 2026-08-01 LOS7-1857 entry below: R0-live had jumped 104 -> 172 the day after LOS7-1870's 829-product apply. LOS7-1912 diagnosed it (root cause confirmed, not a revert); this issue is the fix.
+
+**Root cause:** `library.py::_absorb_enrichment()` projects enrichment-drafts' `proposed_subject_description` into the library plane unconditionally. Enrichment-drafts are Layer 3 pre-audit staging — nothing regenerates them once a later factual audit corrects and applies different text straight to Shopify. `applied.py` was supposed to be the plane that catches exactly this ("this live value diverges from the library on purpose, per a logged correction"), but it was opt-out by default (LOS7-1587) because its free-form regex parser reliably produced garbage — confirmed again this session against both the archived tone-of-voice-rollout corpus (91 "entries", all junk, matching LOS7-1587's own finding) and the one hand-written sprint report since landed in the live `applied/` folder (same shape, same result). So with `applied` off, the reconciler had no way to tell "live changed on purpose" from "live drifted."
+
+**Fix, both halves shipped (the issue's own recommended (a)+(b), not the (c) stopgap):**
+- `applied.py` rewritten to parse ONLY the structured shape factual-audit applies actually write — one file per series, one `### \`product-handle\`` block per product with its own Before/After blockquote — globbing `cowork/brand-voice/{applied,audits/*/applied}/`. Anything that doesn't match the structured shape is skipped, never guessed at. Entries sort by `**Applied:**` date so the chronologically latest record wins a repeat key (`root.rglob()` order is filesystem-dependent, not chronological). The archived tone-of-voice-rollout root is no longer walked at all.
+- `library.py::read_library()` takes an optional `applied_plane` (passed in by `runner.py`, computed per-series before the library read now instead of after); `_absorb_enrichment()` skips any (product, field) an applied record already covers.
+- Default `--planes` (cli.py) and `run_reconciliation()`'s fallback (runner.py) both changed from `library,shopify` to `library,shopify,applied`. `captions` stays opt-in (unchanged, editorial call).
+
+**Verified live**, not just in tests (127 pass, was 113): ran the real scheduled wrapper against production Shopify. **172 -> 90 R0-live**, which is BELOW the 104 pre-apply baseline — the same enrichment-draft-staleness bug was already producing 14 of the original 104 for corrections applied before 07-31 too, not just the reported 68-row spike (82 resolved total: 68 + 14). Zero new rows introduced (`comm -13` on the full before/after row set is empty). Spot-checked several resolved rows against their applied record's After text and live Shopify directly (`ashio-copper-mine-crusher`, `mv-cape-don-wharf`, the `awaba-colliery` 13-vs-15-vs-13 pattern across the 07-31/08-01/08-04 reports) — all genuine, all correctly explained by an applied correction matching live. Report: `cowork/brand-voice/facts-library/_reconciliation/2026/reconciliation-report-2026-08-04.md`, committed separately in the `brand-voice` repo (`6f29593`, unpushed per the LOS7-1520 commit-only convention).
+
+**The issue's "immediate cleanup" step (fix option (c): mechanically refresh the 18 affected series' enrichment-draft JSONs) turned out unnecessary.** It was explicitly framed as a stopgap for if the code fix wasn't landing immediately. Since (a)+(b) shipped in this same session, the count already dropped via the read side (supersession) — no JSON files were edited. Worth doing as its own hygiene pass eventually (the drafts genuinely are stale at rest), but it's no longer load-bearing for the reconciler's accuracy, so left alone here.
+
+**Found, not fixed, filed separately:** the deployed launchd wrapper (`~/.claude/scripts/lc-facts-reconcile-scheduled.sh`, the one the plist actually points at) has a stale duplicate at `~/Claude/scheduled/launchd/scripts/lc-facts-reconcile-scheduled.sh` — missing the LOS7-1603 retry logic and the LOS7-1520 auto-commit step entirely (still ends in a bare `exec`, pre-dating both). Ran the stale copy once for this session's live verification before noticing; harmless (same underlying CLI, just skipped the auto-commit, which I did by hand). Filed as its own Linear issue rather than fixed here — out of LOS7-1929's scope.
+
+**Brett-actions** — none.
+
+---
+
 ## 2026-08-01 — LOS7-1857: stopped daily churn on informationless reports (commit `cdac779`)
 
 `write_report()` unconditionally created `reconciliation-report-YYYY-MM-DD.md` on every launchd run. Filed and premise-checked in `prototyping-workbench` first: measured 2026-07-21 through 2026-07-31, every report was exactly 44002 bytes and consecutive days differed by exactly one line (`**Run date:**`). Two committed files a day apart, zero information. **Decided source of the fix is here, not the downstream index** — the downstream `content/facts-library*.index.json` files in prototyping-workbench derive `reportDate` from the filename, so churn there is a symptom, not the defect.
