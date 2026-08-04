@@ -31,14 +31,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--planes",
-        default="library,shopify",
+        default="library,shopify,applied",
         help=(
             "Comma-separated subset of planes: library,applied,shopify,captions. "
-            "Default is library,shopify — the two that carry trustworthy data. "
-            "'applied' and 'captions' are OPT-IN, see LOS7-1587: applied parses "
-            "free-form prose from a retired project and yields unusable handles; "
-            "captions now correlate correctly but the caption-vs-library grade "
-            "needs an editorial decision before it runs by default."
+            "Default is library,shopify,applied. 'captions' stays OPT-IN — see "
+            "LOS7-1587 — because whether caption != library is a defect is an "
+            "editorial call, not a code one. 'applied' rejoined the default "
+            "2026-08-04 (LOS7-1929): it now reads a structured per-product "
+            "record shape instead of scraping free-form prose."
         ),
     )
     parser.add_argument(

@@ -60,10 +60,14 @@ def run_reconciliation(
     dry_run: bool = False,
 ) -> ReconciliationResult:
     if planes is None:
-        # library + shopify only. 'applied' and 'captions' are opt-in — see
-        # LOS7-1587 and the --planes help text. Defaulting to all four is what
-        # made every report advertise four planes while two supplied nothing.
-        planes = {"library", "shopify"}
+        # 'captions' stays opt-in — see LOS7-1587 and the --planes help text;
+        # whether caption != library is a defect is an editorial call, not a
+        # code one. 'applied' rejoined the default 2026-08-04 (LOS7-1929):
+        # it was opt-out only because its old free-form parser extracted
+        # unusable junk (see planes/applied.py's module docstring); the
+        # rewrite reads a structured record shape reliably instead of
+        # guessing at prose, so there's no longer a reason to leave it off.
+        planes = {"library", "shopify", "applied"}
 
     all_handles = handles or _discover_handles()
 
@@ -88,16 +92,20 @@ def run_reconciliation(
     planes_with_data: set[str] = set()
 
     for handle in all_handles:
-        lib_result: LibraryReadResult = read_library(handle)
-        library_plane = lib_result.plane
-        internal_conflicts = lib_result.internal_conflicts
-        all_open_claims.extend(lib_result.open_claims)
-
         applied_plane: PlaneData | None = None
         if applied_results and handle in applied_results.plane_by_handle:
             applied_plane = applied_results.plane_by_handle[handle]
             if applied_plane.values:
                 planes_with_data.add("applied")
+
+        # applied_plane passed in so a stale enrichment-draft claim already
+        # superseded by an applied record isn't absorbed as a live library
+        # claim (LOS7-1929) — read_library needs to know what applied
+        # already covers for this series before it reads the draft.
+        lib_result: LibraryReadResult = read_library(handle, applied_plane)
+        library_plane = lib_result.plane
+        internal_conflicts = lib_result.internal_conflicts
+        all_open_claims.extend(lib_result.open_claims)
 
         shopify_plane: PlaneData | None = None
         if use_shopify:
