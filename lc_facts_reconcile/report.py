@@ -168,6 +168,21 @@ def _latest_existing_report(path: Path) -> Path | None:
     return candidates[0] if candidates else None
 
 
+def report_was_reused(final_path: Path, output_path: Path | None = None) -> bool:
+    """True when `write_report` handed back an EXISTING dated report rather than
+    writing today's (the LOS7-1857 dedup fired).
+
+    The dedup itself is correct. What it lacked was a way to SAY it had fired:
+    the CLI printed the returned path with no indication the file was not
+    written today, so four healthy runs (2026-08-05 to 08-08) read as four days
+    of a dead job and burned a full investigation before the code was read
+    (LOS7-2004). An explicit `--output` is never a reuse — it always writes.
+    """
+    if output_path is not None:
+        return False
+    return final_path != default_report_path()
+
+
 def write_report(
     data: ReportData,
     output_path: Path | None = None,
