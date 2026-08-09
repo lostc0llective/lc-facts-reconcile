@@ -120,7 +120,17 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
     )
 
+    from .report import report_was_reused
+
     print(f"\nReport:      {result.report_path}")
+    # Say so when the dedup fired. Printing a path that was NOT written today
+    # with no further comment is what made four healthy runs look like a dead
+    # job (LOS7-2004).
+    if not args.dry_run and report_was_reused(result.report_path, output_path):
+        print(
+            "             ^ REUSED: findings are unchanged, so no new dated "
+            "report was written today (LOS7-1857 dedup). This is normal."
+        )
     print(f"Series:      {result.series_count}")
     print(f"Products:    {result.product_count}")
     print(f"Disagreements: {result.disagreement_count} total")
@@ -152,7 +162,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 3
 
-    return 1 if any(d.severity == "R0-live" for d in result.disagreements) else 0
+    # Exit 1 is a FINDINGS signal, not a failure — the tri-state is
+    # 0 = no R0-live, 1 = R0-live outstanding, 3 = the run itself failed.
+    # Nothing said so, so a daily exit 1 sitting in `launchctl list` was read
+    # as a daily crash and cost an investigation (LOS7-2004). Say it out loud.
+    r0_live = sum(1 for d in result.disagreements if d.severity == "R0-live")
+    if r0_live:
+        print(
+            f"\nExit 1 — {r0_live} R0-live disagreement(s) outstanding. The run "
+            "COMPLETED NORMALLY; this is a findings signal, not a failure. "
+            "(0 = none outstanding, 1 = R0-live outstanding, 3 = run failed.)"
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

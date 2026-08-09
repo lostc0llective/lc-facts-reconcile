@@ -1,5 +1,34 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-08-09 — LOS7-2004: the daily "failure" was two healthy features and a monitor watching the wrong artefact
+
+**The reported defect does not exist. The reconciler has been running correctly every morning.** Both premises in the issue were false, and both were confirmed false by reproducing the real scheduled run (not by reading code alone):
+
+- **"Exits 1 daily"** — exit 1 is a designed FINDINGS signal, not a failure. `cli.py` returns a tri-state: `0` = no R0-live outstanding, `1` = R0-live outstanding, `3` = the run itself failed. There are 90 R0-live disagreements, so exit 1 is the correct and expected daily status. The wrapper's retry loop declining to retry it is also correct — there is nothing transient to retry.
+- **"Has written no report since 2026-08-04"** — that is the LOS7-1857 dedup working exactly as designed. `write_report()` compares findings (report content minus the `**Run date:**` line) against the newest existing report and, when identical, returns that path instead of writing a churn duplicate. Findings have not changed since 08-04, so no new dated file. Reproduced live: a full run this session produced byte-identical findings and returned the 08-04 path.
+- **The `LastExitStatus` flip-flop** (256 in the tidy sweep, 0 today) is a red herring: `launchctl print` showed `runs = 0, last exit code = (never exited)`. launchd resets `LastExitStatus` to 0 on reload/reboot, so a `0` there can mean "has not run since load", not "ran cleanly". It is not a usable health signal on its own.
+- **The em-dash lead was a resolved historical issue, not the cause.** `shopify.py::_assert_header_safe()` documents it: on 2026-07-08 the em dash was in the **access token**, not in a Shopify field, and urllib encodes header values as latin-1. Those `.err` entries are dated **2026-07-02**, before the LOS7-1585 fix. `.env.tpl` no longer supplies `SHOPIFY_ACCESS_TOKEN`, auth falls through to App A client-credentials, and the error stopped — which is why `.err` has been silent since 07-31 and why the 08-01 disagreement count jumped (more products actually being scanned).
+- **"Nothing caught it" was also false — and the opposite of the problem.** `automation-watchdog` HAS flagged `facts-reconcile` **STALE every day since 08-05** ("newest artefact 118.8h old, limit 26.0h"). It was crying wolf: it watched the dated-report glob, and since the LOS7-1857 dedup an unchanged-findings day legitimately writes no report. The same latent false positive sat in the reliability sweep (`sweep.py` flagged "Reconciler stalled" when `r0_latest_date == prev_r0_date`, i.e. whenever findings held steady for a week).
+
+**What WAS real, and is fixed.** A report is an artefact of the FINDINGS; only a run heartbeat can answer "did it run":
+
+- **Wrapper writes a RUN heartbeat** (`~/Claude/cowork/agents/logs/lc-facts-reconcile.heartbeat.json`) on every completed run: `finished_at`, `run_date`, `status`, `status_meaning`, `healthy` (exit 0/1 = healthy).
+- **Wrapper now alerts on exit 3 and on any unexpected status.** Previously the ONLY alert fired when all three attempts died on *network* errors, so exit 3 (fail-closed: the run ran but its numbers mean nothing) reached nobody. Exit 1 deliberately does NOT alert — alerting on the normal daily state trains the alert to be ignored.
+- **`ENABLE_NOTIFICATIONS=true` added to the launchd plist.** Without it `notify_actionable` console-echoes and returns 0, so even the pre-existing LOS7-1603 alert could never have reached Brett. Verified: ntfy topic resolves, both channels fire on exit 3 and 127, neither fires on exit 1.
+- **`automation-watchdog` row repointed** from the report glob to the heartbeat, with a `healthy":false` content probe. Stale count went 3 -> 2; the row now reads `ok: facts-reconcile`.
+- **`sweep.py` liveness rewritten** to read the heartbeat (48h tolerance). The `unchanged since the last sweep` false-positive clause is gone; report age survives only as a corroborating signal, and only when the heartbeat is also missing or unhealthy.
+- **The daily log no longer lies.** The CLI now prints `^ REUSED: findings are unchanged...` when the dedup fires, and spells out what exit 1 means. Printing a path that was not written today with no further comment is precisely what cost this investigation. 3 new tests (`tests/test_report_reuse_signal.py`), suite 127 -> 131, all green.
+
+**Done-when #2 from the issue ("a run writes a fresh dated report, and the exit code is 0") is rejected as premised on the bug that does not exist.** Forcing a fresh dated report would re-introduce exactly the churn LOS7-1857 removed, and exit 0 would require zero R0-live disagreements — a property of the catalogue's data, not something code can or should make true. Everything else in the issue is delivered.
+
+**Verified live**, end to end: reloaded the plist and fired the real launchd job (`launchctl kickstart`). It ran against production Shopify, scanned 122 series / 1961 products, reused the 08-04 report, exited 1, wrote a correct heartbeat, and sent no alert.
+
+**Found, not fixed:** the stale duplicate wrapper at `~/Claude/scheduled/launchd/scripts/lc-facts-reconcile-scheduled.sh` (flagged in the 2026-08-04 entry below) is still there and has now diverged further, since this session's changes landed only in the deployed `~/.claude/scripts/` copy that the plist actually points at. Also pre-existing and unrelated: `facts-library-reliability-sweep/test_cross_layer.py` fails one assertion (`respects the declared open-question allowlist`) — confirmed failing identically with `sweep.py` stashed, so not caused by this work. Both filed separately.
+
+**Brett-actions** — none.
+
+---
+
 ## 2026-08-04 — LOS7-1929: applied plane rewritten, rejoins the default; closes the LOS7-1912 diagnosis (commit `77b77d3`)
 
 Picks up the "worth its own look" note at the bottom of the 2026-08-01 LOS7-1857 entry below: R0-live had jumped 104 -> 172 the day after LOS7-1870's 829-product apply. LOS7-1912 diagnosed it (root cause confirmed, not a revert); this issue is the fix.
