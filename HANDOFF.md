@@ -1,5 +1,23 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-08-15 — LOS7-2097: 87 of the 90 R0-live were stale drafts, because supersession asked the wrong question
+
+**Built:** `38b871b`, pushed direct to `main`. `lc_facts_reconcile/planes/library.py` (`_superseded`) + `tests/test_library_applied_supersede.py`. 132 tests pass.
+
+**This closes the open thread from the 2026-08-09 entry below.** That session correctly established exit 1 is a findings signal and the 90 were the real standing count. It did not ask whether the 90 were *right*. They were not: 87 were live copy nobody disputes, measured against May enrichment drafts that were never promoted.
+
+**The defect.** LOS7-1929 already knew an enrichment draft is Layer 3 pre-audit staging and skipped one once an applied record covered it — keyed on the exact `(product.<handle>, field)`. The absence of a record was then read as "the draft is still authoritative". It does not mean that. A factual audit covers a SERIES and adjudicates every product in it: the ones it finds defective get an applied record, the ones it leaves alone were examined and found correct. Both outcomes date the draft. Same absence-is-not-a-negative class as LOS7-2078.
+
+**Measured, not assumed:** 87 of 90 rows were product-level in series the LOS7-1864/1870 audit covered; the other 3 are `series.metaobject` and unaffected. `elrington-colliery` alone was 53 of the 90 — that apply rewrote 8 products and examined the other ~45, and each of those ~45 stale drafts graded as unbacked live exposure.
+
+**Kept deliberately narrow.** Still per FIELD (an audit that rewrote `subject_description` says nothing about a `print_story` draft). `applied_plane=None` still suppresses nothing. And `_live_is_trim_of_library` stays PREFIX-only — `mckillops-bridge` drops a locality mid-string and is still flagged, because widening to substring is Brett's explicit 2026-07-20 ruling against (a library sentence carrying a negation could clear a live claim contradicting it). One existing test pinned the narrow key and was corrected rather than weakened; its real intent (a series no audit has touched still gets its drafts absorbed) is preserved by giving the applied plane a different FIELD.
+
+**Verified end-to-end, and the guard still bites.** Full scheduled run after the change: 3 R0-live from the same 122 series / 1,961 products, so coverage did not shrink. `mount-russell-grain-silo` still fires and is GENUINE — its live metaobject claims "Inverell Shire, Northern Tablelands" where the research file says North West Slopes and never states the LGA (checked the whole file, not just the At-a-glance table: "Inverell Shire" appears 7 times but only as *Council*, in custodian context). That finding is the proof the fix did not blind the detector.
+
+**Brett-action: one decision, in LOS7-2098.** mount-russell's live location either gets its LGA/region sourced into the research file with citations, or the unsourced terms come off the live metaobject. Both are almost certainly true facts, which is exactly the trap — Rule 0 makes the library the ceiling, not plausibility.
+
+**Also logged in LOS7-2098, not fixed here:** `ashio-copper-mine` is a FALSE positive hiding a real parser bug — its research file carries two `| Location |` rows and live matches the `[S1]` one verbatim, but `_parse_at_a_glance` builds a plain dict so the second row silently overwrites the first. Any duplicated At-a-glance key discards a sourced row. The fix needs a small data-model change (a key holding candidate values, `_classify` agreeing if live matches ANY) rather than an arbitrary first-or-last, so it was not rushed into the same session as a supersession change to the Rule-0 guard.
+
 ## 2026-08-09 — LOS7-2004: the daily "failure" was two healthy features and a monitor watching the wrong artefact
 
 **The reported defect does not exist. The reconciler has been running correctly every morning.** Both premises in the issue were false, and both were confirmed false by reproducing the real scheduled run (not by reading code alone):
