@@ -222,22 +222,45 @@ class TestLiveMatchingAnyCandidateIsNotExposure:
 
 
 class TestTrimAppliesAcrossCandidates:
-    def test_live_trimmed_from_the_first_candidate_is_not_exposure(self, tmp_path, monkeypatch):
+    def _findings(self, tmp_path, monkeypatch, live_location: str):
         result = _write_library(tmp_path, monkeypatch, "ashio-copper-mine", ASHIO_TWO_TABLE_MARKDOWN)
         shopify = PlaneData()
-        # A strict prefix of the [S1] row, breaking at a word boundary.
-        shopify.values[("series.metaobject", "location")] = (
-            "Tsudō (通洞), Ashio Town (足尾町), now part of Nikkō City,"
-        )
-
-        findings = compute_disagreements(
+        shopify.values[("series.metaobject", "location")] = live_location
+        return compute_disagreements(
             handle="ashio-copper-mine",
             series="Ashio Copper Mine",
             library=result.plane,
             shopify=shopify,
         )
 
+    def test_live_trimmed_from_the_first_candidate_is_not_exposure(self, tmp_path, monkeypatch):
+        # A strict prefix of the [S1] row, breaking at a word boundary.
+        findings = self._findings(
+            tmp_path, monkeypatch, "Tsudō (通洞), Ashio Town (足尾町), now part of Nikkō City,"
+        )
+
         assert _r0_live_locations(findings) == []
+
+    def test_live_trimmed_from_a_NON_primary_candidate_is_not_exposure(
+        self, tmp_path, monkeypatch
+    ):
+        """The trim rule must run against every candidate, not just the primary.
+
+        A prefix of the [S1] row is also a prefix of the primary, so it cannot
+        tell the two apart. This one is a prefix of the [S3] row only.
+        """
+        findings = self._findings(
+            tmp_path, monkeypatch, "Ashio, Tochigi Prefecture (now part of Nikkō, Tochigi),"
+        )
+
+        assert _r0_live_locations(findings) == []
+
+    def test_a_prefix_of_no_candidate_is_still_exposure(self, tmp_path, monkeypatch):
+        findings = self._findings(
+            tmp_path, monkeypatch, "Osaka, Kansai Prefecture (now part of somewhere else),"
+        )
+
+        assert len(_r0_live_locations(findings)) == 1
 
 
 # ---------------------------------------------------------------------------
