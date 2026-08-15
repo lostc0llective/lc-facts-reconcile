@@ -289,10 +289,36 @@ def _absorb_enrichment(
 
 
 def _superseded(applied_plane: PlaneData | None, product_handle: str, dst_key: str) -> bool:
-    """True when a later applied record already covers this exact surface."""
+    """True when a later applied pass has made this draft field stale.
+
+    Keyed on the FIELD across the whole series, not on this one product.
+
+    LOS7-2097. The original LOS7-1929 rule asked "does an applied record cover
+    this exact (product, field)?" — which reads the ABSENCE of a record as "the
+    draft is still authoritative". It does not mean that. A factual audit
+    covers a SERIES and adjudicates every product in it: the ones it found
+    defective get an applied record, and the ones it left alone were examined
+    and found correct. Both outcomes date the pre-audit draft.
+
+    Reading absence as authority left 87 of the 90 R0-live rows standing in the
+    2026-08-04 report — live copy nobody disputes, measured against May
+    enrichment drafts that were never promoted. 53 were elrington-colliery
+    alone, where the LOS7-1870 apply rewrote 8 products and examined the rest.
+    Same absence-is-not-a-negative class as LOS7-2078.
+
+    Still per FIELD: an audit that rewrote subject_description says nothing
+    about a print_story draft, so widening stops at the field boundary. And an
+    applied_plane of None (a --planes run excluding 'applied') still suppresses
+    nothing, exactly as before.
+    """
     if applied_plane is None:
         return False
-    return (f"product.{product_handle}", dst_key) in applied_plane.values
+    if (f"product.{product_handle}", dst_key) in applied_plane.values:
+        return True
+    return any(
+        surface.startswith("product.") and key == dst_key
+        for surface, key in applied_plane.values
+    )
 
 
 def list_research_handles() -> list[str]:
