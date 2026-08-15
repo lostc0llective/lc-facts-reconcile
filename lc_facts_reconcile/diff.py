@@ -32,11 +32,34 @@ class Disagreement:
 
 @dataclass
 class PlaneData:
-    """Comparable data from one input plane, keyed by (surface, field)."""
+    """Comparable data from one input plane, keyed by (surface, field).
+
+    A source may state the same key more than once and mean two different
+    things by it — ashio-copper-mine's research file carries one `| Location |`
+    row for the Tsudō dressing plant Brett photographed and another for the
+    wider Ashio mine, each separately sourced. `values` holds the first stated
+    value as the display primary; `alternates` holds EVERY stated value in
+    source order whenever there is more than one (LOS7-2098).
+
+    Read candidates through `candidates()`, never `values` directly, anywhere a
+    claim is being tested for backing: agreement with any one of them is
+    agreement with the library. Picking a single winner first-or-last is
+    arbitrary either way, and picking wrong reports a backed live claim as
+    Rule 0 exposure on the strength of a row the parser happened to discard.
+    """
     values: dict[tuple[str, str], str] = field(default_factory=dict)
+    alternates: dict[tuple[str, str], list[str]] = field(default_factory=dict)
 
     def get(self, surface: str, field_name: str) -> str | None:
         return self.values.get((surface, field_name))
+
+    def candidates(self, surface: str, field_name: str) -> list[str]:
+        """Every value this plane states for the key, in source order."""
+        alts = self.alternates.get((surface, field_name))
+        if alts:
+            return list(alts)
+        val = self.values.get((surface, field_name))
+        return [val] if val is not None else []
 
     def keys(self) -> set[tuple[str, str]]:
         return set(self.values.keys())
@@ -98,7 +121,12 @@ def compute_disagreements(
         sho_val = shopify.get(surface, field_name) if shopify else None
         cap_val = captions.get(surface, field_name) if captions else None
 
-        d = _classify(handle, series, surface, field_name, lib_val, app_val, sho_val, cap_val)
+        lib_candidates = library.candidates(surface, field_name)
+
+        d = _classify(
+            handle, series, surface, field_name, lib_val, app_val, sho_val, cap_val,
+            lib_candidates,
+        )
         if d:
             results.append(d)
 
@@ -118,7 +146,7 @@ def compute_disagreements(
             and d.severity != "caption-conflict"
             and cap_val is not None
             and lib_val is not None
-            and not _values_agree(cap_val, lib_val)
+            and not _agrees_with_any(cap_val, lib_candidates)
         ):
             results.append(
                 Disagreement(
@@ -127,7 +155,7 @@ def compute_disagreements(
                     handle=handle,
                     surface=surface,
                     field=field_name,
-                    library_says=lib_val or "(no entry)",
+                    library_says=_render_library_says(lib_candidates, lib_val),
                     applied_says=app_val,
                     shopify_says=sho_val,
                     caption_says=cap_val,
@@ -148,6 +176,7 @@ def _classify(
     app_val: str | None,
     sho_val: str | None,
     cap_val: str | None,
+    lib_candidates: list[str] | None = None,
 ) -> Disagreement | None:
     """Return a Disagreement or None for a single (surface, field) tuple.
 
@@ -155,11 +184,20 @@ def _classify(
     Shopify fields with no library counterpart are skipped — backing requires
     a matching key. Semantic backing-detection (does Shopify prose match any
     library fact?) is a v2 feature.
+
+    lib_candidates is every value the library states for this key (LOS7-2098).
+    Backing is agreement with ANY of them, because a key stated twice is two
+    separately sourced claims, not one claim and one mistake. Defaults to
+    [lib_val] so a caller comparing a single value behaves exactly as before.
     """
     severity: str | None = None
 
     if lib_val is None and cap_val is None:
         return None
+
+    candidates = list(lib_candidates) if lib_candidates else (
+        [lib_val] if lib_val is not None else []
+    )
 
     # LIVE EXPOSURE IS TESTED FIRST AND ALWAYS WINS THE PRIMARY GRADE.
     # Caption-conflict used to be tested first with an early return, which was
@@ -171,18 +209,23 @@ def _classify(
     if (
         sho_val is not None
         and lib_val is not None
-        and not _values_agree(sho_val, lib_val)
-        # A live value that is the library value with a trailing tail removed
+        and not _agrees_with_any(sho_val, candidates)
+        # A live value that is a library value with a trailing tail removed
         # states nothing the library does not back, so it is not R0-live.
-        and not _live_is_trim_of_library(sho_val, lib_val)
+        and not any(_live_is_trim_of_library(sho_val, c) for c in candidates)
     ):
         if app_val is not None and _values_agree(app_val, sho_val):
             severity = "drift"
         else:
             severity = "R0-live"
-    elif cap_val is not None and lib_val is not None and not _values_agree(cap_val, lib_val):
+    elif cap_val is not None and lib_val is not None and not _agrees_with_any(cap_val, candidates):
         severity = "caption-conflict"
-    elif app_val is not None and lib_val is not None and not _values_agree(app_val, lib_val) and sho_val is None:
+    elif (
+        app_val is not None
+        and lib_val is not None
+        and not _agrees_with_any(app_val, candidates)
+        and sho_val is None
+    ):
         severity = "R0-pending"
 
     if severity is None:
@@ -194,7 +237,7 @@ def _classify(
         handle=handle,
         surface=surface,
         field=field_name,
-        library_says=lib_val or "(no entry)",
+        library_says=_render_library_says(candidates, lib_val),
         applied_says=app_val,
         shopify_says=sho_val,
         caption_says=cap_val,
@@ -206,6 +249,28 @@ def _classify(
 def _values_agree(a: str, b: str) -> bool:
     """Normalised comparison — ignores dash variants, case, extra whitespace."""
     return _normalise(a) == _normalise(b)
+
+
+def _agrees_with_any(value: str, candidates: list[str]) -> bool:
+    """True when the value matches any one of the library's stated values."""
+    return any(_values_agree(value, c) for c in candidates)
+
+
+# Separator between library candidates in a finding's library_says. report.py's
+# _cell escapes bare pipes to &#124; so this survives the markdown table.
+_CANDIDATE_JOIN = "  ||  "
+
+
+def _render_library_says(candidates: list[str], lib_val: str | None) -> str:
+    """Show the human EVERY value the library states, not just the primary.
+
+    Whoever adjudicates a flag on a key the library states twice needs both
+    rows in front of them — seeing one of two sourced claims is how a backed
+    live value gets read as unbacked.
+    """
+    if len(candidates) > 1:
+        return _CANDIDATE_JOIN.join(candidates)
+    return lib_val or (candidates[0] if candidates else "(no entry)")
 
 
 # A live value shorter than this is treated as a stub, not a deliberate trim, and

@@ -50,15 +50,20 @@ def read_library(handle: str, applied_plane: PlaneData | None = None) -> Library
     internal_conflicts: list[Disagreement] = []
 
     research_file = RESEARCH_ROOT / f"{handle}.md"
-    research_facts: dict[str, str] = {}
+    research_facts: dict[str, list[str]] = {}
     research_exists = research_file.exists()
 
     if research_exists:
         text = research_file.read_text(encoding="utf-8", errors="replace")
         research_facts = _parse_at_a_glance(text)
-        for key, val in research_facts.items():
+        # values[] carries the first stated value as the display primary;
+        # alternates[] carries every candidate so the matcher can accept
+        # agreement with any of them (LOS7-2098).
+        for key, vals in research_facts.items():
             surface = "research.at_a_glance"
-            plane.values[(surface, key)] = val
+            plane.values[(surface, key)] = vals[0]
+            if len(vals) > 1:
+                plane.alternates[(surface, key)] = list(vals)
 
         # Series-to-metaobject projection (iterate-2, 2026-05-31).
         # The Shopify plane reads the series metaobject and emits
@@ -69,8 +74,10 @@ def read_library(handle: str, applied_plane: PlaneData | None = None) -> Library
         # given key, _classify yields no finding; when both planes
         # have an entry, R0-live / drift / R0-pending fires per
         # the standing severity grade rules in diff.py.
-        for key, val in research_facts.items():
-            plane.values[("series.metaobject", key)] = val
+        for key, vals in research_facts.items():
+            plane.values[("series.metaobject", key)] = vals[0]
+            if len(vals) > 1:
+                plane.alternates[("series.metaobject", key)] = list(vals)
 
         open_claims.extend(_extract_open_claims(handle, text, str(research_file)))
 
@@ -85,9 +92,13 @@ def read_library(handle: str, applied_plane: PlaneData | None = None) -> Library
 
     for key, lib_val in master_facts.items():
         if key in research_facts:
-            res_val = research_facts[key]
-            from ..diff import _values_agree, _RESOLUTION_RULES, _RECOMMENDED_ACTIONS
-            if not _values_agree(lib_val, res_val):
+            res_vals = research_facts[key]
+            # Agreement with ANY stated research value is agreement — a key the
+            # research file states twice is two sourced claims, so matching the
+            # one that is not the display primary is not two files disagreeing
+            # (LOS7-2098).
+            from ..diff import _agrees_with_any, _RESOLUTION_RULES, _RECOMMENDED_ACTIONS
+            if not _agrees_with_any(lib_val, res_vals):
                 internal_conflicts.append(Disagreement(
                     severity="internal",
                     series=handle,
@@ -97,7 +108,7 @@ def read_library(handle: str, applied_plane: PlaneData | None = None) -> Library
                     library_says=f"_master.md: {lib_val}",
                     applied_says=None,
                     shopify_says=None,
-                    caption_says=f"research file: {res_val}",
+                    caption_says="research file: " + "  ||  ".join(res_vals),
                     resolution_rule=_RESOLUTION_RULES["internal"],
                     recommended_action=_RECOMMENDED_ACTIONS["internal"],
                 ))
@@ -120,9 +131,23 @@ def read_library(handle: str, applied_plane: PlaneData | None = None) -> Library
     )
 
 
-def _parse_at_a_glance(text: str) -> dict[str, str]:
-    """Extract the key-value table under '## At a glance'."""
-    facts: dict[str, str] = {}
+def _parse_at_a_glance(text: str) -> dict[str, list[str]]:
+    """Extract the key-value table under '## At a glance'.
+
+    Returns EVERY value stated for a key, in document order (LOS7-2098).
+
+    A research file may carry more than one table under the one heading, each
+    describing a different subject at the same site: ashio-copper-mine has a
+    table for the Tsudō dressing plant Brett photographed and a second for the
+    wider Ashio mine, and both state `| Location |` and `| Heritage status |`
+    against different cites. This built a plain dict, so the second row
+    overwrote the first and one sourced claim vanished with no signal — which
+    then graded a live value matching the discarded row as Rule 0 exposure.
+
+    Duplicate rows stating the SAME value collapse to one entry; only genuinely
+    differing values become separate candidates.
+    """
+    facts: dict[str, list[str]] = {}
     in_table = False
     for line in text.splitlines():
         if re.match(r"^##\s+At a glance", line, re.IGNORECASE):
@@ -136,7 +161,10 @@ def _parse_at_a_glance(text: str) -> dict[str, str]:
                 key = parts[0].rstrip(":")
                 val = parts[1]
                 if val and key.lower() not in ("field", "value"):
-                    facts[key.lower().replace(" ", "_").replace("/", "_")] = val
+                    norm_key = key.lower().replace(" ", "_").replace("/", "_")
+                    seen = facts.setdefault(norm_key, [])
+                    if val not in seen:
+                        seen.append(val)
     return facts
 
 
