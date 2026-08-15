@@ -1,5 +1,47 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-08-15 — LOS7-2098: the last 3 R0-live rows were three different things, and are all closed
+
+**Built:** `ab52bd3` + `bde88c3`, pushed direct to `main`. `diff.py`, `planes/library.py`, `tests/test_duplicate_at_a_glance_key.py`. 150 tests pass (was 148 after LOS7-2097's entry below; that entry's "132" predates the count). Facts-library side: `lc-brand-voice` `15968c3`.
+
+**R0-live on `location` across the three survivors: 3 to 0.** Verified end to end against the real research files and the real live metaobjects, not fixtures.
+
+### 1. ashio-copper-mine — the parser bug (code)
+
+Its research file carries TWO tables under one `## At a glance` heading: one for the Tsudō dressing plant Brett photographed, one for the wider Ashio mine. Both state `| Location |` and both state `| Heritage status |`, each against a different cite. `_parse_at_a_glance` built a plain dict, so the second row silently overwrote the first and live, which matches the `[S1]` row verbatim, was graded as carrying a claim the library does back.
+
+Fixed with candidates rather than an arbitrary first-or-last:
+
+- `_parse_at_a_glance` returns `dict[str, list[str]]`, every stated value in document order.
+- `PlaneData` gains `alternates` and `candidates()`; `values` keeps the FIRST stated value as the display primary (it used to be the last, by dict overwrite).
+- `_classify` treats agreement with ANY candidate as backing, and runs the trim rule against each candidate.
+- Same widening applied to caption-conflict, R0-pending, and the `_master.md` internal-conflict check, which all had the identical false-positive shape.
+- A finding on a multi-candidate key reports every candidate in `library_says`, so whoever adjudicates sees both rows.
+
+**Blast radius, measured not assumed:** swept all 122 research files. ashio was the ONLY file with duplicated keys, on exactly those two, and both discarded a genuinely differing value. Post-change the profile is 122 files / 1,138 keys / 3 duplicated keys (ashio x2, plus mckillops x1 added deliberately below).
+
+**The guard was not widened and is not blind.** `_live_is_trim_of_library` stays PREFIX-only per Brett 2026-07-20. Five mutations of the fix were applied and each fails the suite. One survived the first pass: replacing the per-candidate trim check with a primary-only one left everything green, because the existing test used a prefix of the `[S1]` row, which is also a prefix of the primary, so it could not tell the two apart. `bde88c3` adds a prefix of the `[S3]` row only. On real data, a wrong live value still fires for all three series, including the subtle right-place-wrong-LGA case.
+
+### 2. mount-russell-grain-silo — genuine, and the previous entry's adjudication was half wrong
+
+The entry below says the file "never states the LGA" and "says North West Slopes". Right on the LGA, wrong on the region. **Line 111 of the file, in the note attached to [S20], says "Mount Russell is geographically in the Northern Tablelands/North West Slopes"** — which is the live wording almost verbatim. It read as unbacked only because it is not in the At-a-glance row the engine compares. The region half was in the library the whole time.
+
+The LGA half was genuinely unsourced. "Inverell Shire" appears 7 times, all as Inverell Shire Council in Traditional-custodian context or as library-lookup leads. The nearest thing was [S16], whose Tier 1 heritage negative filtered by "Inverell LGA" and so leaned on the LGA as an *unstated premise* of a Tier 1 finding.
+
+Sourced this pass, Brett's call: **[S21], NSW Geographical Names Register record 39931** (via the Data.NSW open-data publication of the GNR) — LGA "INVERELL", DESIGNATION "LOCALITY", gazetted 28 February 1997, Parish of Little Plain, County of Murchison, description "Boundaries within the Inverell Council area shown on map GNB3654". Tier 1, statutory register. The At-a-glance Location row now carries both halves, live is unchanged, and the live value is a clean prefix of the row so the existing trim rule clears it.
+
+**Deliberately NOT sourced:** the GNR carries no "Northern Tablelands" or "North West Slopes" record. Neither is a gazetted place name, so no Tier 1 cite exists and the row marks that half explicitly as the file's own geographic descriptor. Do not let a later pass cite [S21] for the region.
+
+### 3. mckillops-bridge — reconciled by decision, matcher untouched
+
+Live dropped "and Wulgulmerang East", naming one of the two localities the bridge spans. Brett's call was to complete live, so the locality went back on via `metaobjectUpdate` (verified by read-back).
+
+**That alone did not clear the flag, and the issue's description of the row as a "strict SUBSET" is not quite right.** Live also paraphrases ("its junction" for "the river's junction", drops "in a deep gorge") and gives the co-ordinates in decimal where the sources give DMS. Nothing on live is unbacked: `-37.0841, 148.4135` is exactly the cited `37 deg 5.047' S, 148 deg 24.811' E` converted (5.047/60 = 0.0841, 24.811/60 = 0.4135).
+
+Rather than strip co-ordinates off a public field to force a prefix match, the published short form is now stated as a **second sourced Location row** in the research file, with a note under the table explaining why both rows exist. This is the candidates model doing what it is for. `_live_is_trim_of_library` was not touched.
+
+**Watch for:** a future tidy-up pass deleting the "duplicate" mckillops Location row, or the second ashio table. Both are load-bearing. The note under mckillops' At-a-glance table says so in the file.
+
 ## 2026-08-15 — LOS7-2097: 87 of the 90 R0-live were stale drafts, because supersession asked the wrong question
 
 **Built:** `38b871b`, pushed direct to `main`. `lc_facts_reconcile/planes/library.py` (`_superseded`) + `tests/test_library_applied_supersede.py`. 132 tests pass.
