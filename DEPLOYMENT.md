@@ -21,8 +21,8 @@ The binding dependency is therefore the **1Password CLI (`op`)** plus the servic
 `~/.claude/scripts/lc-facts-reconcile-scheduled.sh` (chmod 755). launchd does not source `~/.zprofile`, so the wrapper:
 
 - sets `PATH` (Python 3.13 framework bin + homebrew + system) and `HOME`
-- sources `OP_SERVICE_ACCOUNT_TOKEN` from `~/.config/op/service-account-token` (so `op run` auths without Touch ID)
-- `cd`s to the repo and runs `op run --env-file=$HOME/Claude/code-projects/lost-collective-dawn/.env.tpl -- lc-facts-reconcile`
+- loads a READ-ONLY 1Password service-account token with `cat` (so `op run` auths without Touch ID), and refuses to run without it; there is no read-write fallback
+- `cd`s to the repo and runs `op run --env-file=<per-job env template> -- lc-facts-reconcile`. The template sits beside the wrapper, outside this public repo, and holds only 1Password references for `SHOPIFY_STORE`, `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET`
 - **(LOS7-1520, 2026-07-18)** after the run, auto-commits the dated report: `git -C ~/Claude/cowork/brand-voice add -- facts-library/_reconciliation/<year>` then commits, scoped ONLY to that directory (never `git add -A`), so brand-voice stops re-accumulating uncommitted reconciliation dailies (the load-bearing category behind LOS7-1208 and LOS7-1519). Commit-only, no push — the next interactive session pushes it along with whatever else it's working on; that's fine, the Done-when bar is a clean working tree, not a pushed one. If the report is unchanged from the previous run (no-op re-fire), `git status --porcelain` is empty and the commit step is skipped.
 
 Note: the wrapper no longer `exec`s into the CLI (it needs to run the commit step afterward), so it now captures and re-exits with the CLI's original status code explicitly.
@@ -108,7 +108,7 @@ The catalogue routinely carries R0-live drift, so a **daily exit code of 1 in `l
 Before a sprint rewrites a series, run the reconciler scoped to that handle to surface drift **before** you rewrite it in:
 
 ```bash
-op run --env-file=$HOME/Claude/code-projects/lost-collective-dawn/.env.tpl -- \
+op run --env-file=<env template: SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET> -- \
   lc-facts-reconcile --only <handle1,handle2,...>
 ```
 
@@ -137,8 +137,8 @@ The report is overwritten on a same-day re-run (the filename is date-keyed).
 - **Logs:** `~/Claude/cowork/agents/logs/lc-facts-reconcile.out` and `.err`.
 - **launchd state:** `launchctl print gui/$(id -u)/com.lostcollective.facts-reconcile` or `launchctl list | grep lostcollective`.
 - **Re-fire manually:** `launchctl kickstart -k gui/$(id -u)/com.lostcollective.facts-reconcile`.
-- **Empty report / Shopify reads fail?** Check the `.err` log for `op` auth errors or `Shopify GQL HTTP` failures. Verify `~/.config/op/service-account-token` is readable and `~/Claude/code-projects/lost-collective-dawn/.env.tpl` exists. The `gql()` error guard (iterate-1) surfaces GraphQL drift loudly rather than silently.
-- **`read_metaobjects` access denied (discovered 2026-06-23):** If all 75 series return `Access denied for metaobjectByHandle field`, the Shopify custom app (`Lost Collective — Shopify`, 1P item `7yiccdwjh5sehwvtiltvbdvjfq`) is missing the `read_metaobjects` access scope. Fix: Shopify Partner Dashboard → Apps → Lost Collective → Configuration → Admin API scopes → add `read_metaobjects` → Deploy. Brett-action required; cannot be done by CC. The agent ran successfully 2026-06-01/06-06 with this scope, so a scope change or credential rotation removed it. Tracked separately.
+- **Empty report / Shopify reads fail?** Check the `.err` log for `op` auth errors or `Shopify GQL HTTP` failures. Verify the wrapper's service-account token file is readable and its env template exists. The `gql()` error guard (iterate-1) surfaces GraphQL drift loudly rather than silently.
+- **`read_metaobjects` access denied (discovered 2026-06-23):** If all 75 series return `Access denied for metaobjectByHandle field`, the Shopify custom app the agent authenticates as is missing the `read_metaobjects` access scope. (Historical: in June that was the old `Lost Collective — Shopify` app, uninstalled 2026-07-07; the agent now mints its token by client credentials from App A "LC Dashboard Data", whose grant includes `read_metaobjects`.) Fix: Shopify Partner Dashboard → Apps → Lost Collective → Configuration → Admin API scopes → add `read_metaobjects` → Deploy. Brett-action required; cannot be done by CC. The agent ran successfully 2026-06-01/06-06 with this scope, so a scope change or credential rotation removed it. Tracked separately.
 - **`lc-facts-reconcile` package missing (discovered 2026-06-23):** If `.err` shows `ModuleNotFoundError: No module named 'lc_facts_reconcile'`, the editable install has a stale path (e.g. from a deleted worktree). Fix: `cd ~/Claude/code-projects/agents/lc-facts-reconcile && /Library/Frameworks/Python.framework/Versions/3.13/bin/pip3 install -e .`
 - **Plist gone from ~/Library/LaunchAgents/ (recurring risk, 2026-06-23):** Same as lc-kg-maintainer — plists exist only in `~/Library/LaunchAgents/`, not git-tracked. The 2026-06-06 to 2026-06-23 gap (17 days silent) was caused by plist removal during a hygiene pass. Recreate from the plist XML above and bootstrap as documented in Install. Restoration sprint: `~/Claude/cowork/agents/verifications/2026-06-23_launchd-restore-agents-4-5.md`.
 

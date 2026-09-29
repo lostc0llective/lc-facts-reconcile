@@ -36,7 +36,7 @@ pip install -e .[dev]
 lc-facts-reconcile
 
 # Scoped to one series
-op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- \
+op run --env-file=<env template: SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET> -- \
   lc-facts-reconcile --only=bathurst-gasworks --planes=library,shopify
 
 # Incremental: only applied records changed since a date
@@ -77,7 +77,7 @@ lc-facts-reconcile --output=path/to/report.md
 
 ## Pre-flight
 
-- `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` — via `op run --env-file=...env.tpl`
+- `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` (+ optional `SHOPIFY_STORE`) — 1Password references resolved by `op run --env-file=<template>`
 - `LINEAR_API_KEY` — from LCAutomation vault via `op run` for `--linear-comment`
 - No Anthropic API key needed — this is a diff engine with no agent loop.
 
@@ -92,7 +92,7 @@ lc-facts-reconcile --output=path/to/report.md
 pytest
 
 # Include the live Shopify integration test (requires creds)
-op run --env-file=~/Claude/code-projects/lost-collective-dawn/.env.tpl -- \
+op run --env-file=<env template: SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET> -- \
   pytest -m integration
 ```
 
