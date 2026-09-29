@@ -1,5 +1,9 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-09-30 — LOS7-3081: this repo is public, so its docs no longer name the token file or a 1Password item
+
+Brett kept the repo public (secret scanning on and clean) on the condition that DEPLOYMENT.md stops naming the service-account token path and 1Password references. Done: the wrapper description, the manual pre-flight example, the troubleshooting line and the June `read_metaobjects` note now describe them without paths or item IDs, and the README examples use a placeholder template. The scheduled run itself changed the same day: it loads the read-only token (no read-write fallback) and a per-job env template (`SHOPIFY_STORE` plus the App A client pair) that lives in the private scheduled repo, instead of dawn's whole `.env.tpl`. Three code strings still point at dawn's template for manual runs; they name no credential and were left.
+
 ## 2026-08-15 — LOS7-2098: the last 3 R0-live rows were three different things, and are all closed
 
 **Built:** `ab52bd3` + `bde88c3`, pushed direct to `main`. `diff.py`, `planes/library.py`, `tests/test_duplicate_at_a_glance_key.py`. 150 tests pass (was 148 after LOS7-2097's entry below; that entry's "132" predates the count). Facts-library side: `lc-brand-voice` `15968c3`.
