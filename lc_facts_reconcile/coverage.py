@@ -93,7 +93,6 @@ PER_PHOTO_METAFIELDS = [
     ("custom", "capture_date"),
     ("custom", "alt_text"),
     ("custom", "subject_description"),
-    ("custom", "lightroom_id"),
     ("custom", "lr_sync_at"),
 ]
 
