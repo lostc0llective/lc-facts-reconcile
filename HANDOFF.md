@@ -1,5 +1,14 @@
 # lc-facts-reconcile — HANDOFF
 
+## 2026-10-18 (reconciled)
+
+HANDOFF brought up to date against git (one commit since the 2026-09-30 entry) and the test suite. No code changed in this reconcile.
+
+- **2026-10-16, `custom.lightroom_id` dropped from coverage (`62b588d`).** One line removed from `PER_PHOTO_METAFIELDS` in `lc_facts_reconcile/coverage.py`. Brett retired the field on 2026-10-16 (the catalogue number is the one product link), so the per-photo coverage plane no longer expects it and will not report it as missing. It is part of the same retirement as the matching commits in the mockup pipeline repo. No other file in this repo changed.
+- **Struck, shipped:** the "one decision, in LOS7-2098" Brett-action (mount-russell location) and the LOS7-2098 R0-live thread. The top 2026-08-15 entry records the three survivors closed (R0-live on `location` 3 to 0, [S21] sourced, mckillops reconciled by decision), so the standing line in the LOS7-2097 entry below is answered by it. Marked in place below.
+- **Tests:** `pytest` gives 150 passed, 1 deselected, 0 failed on a clean tree level with origin, the same 150 the 2026-08-15 entry quotes.
+- **Genuinely open:** (1) `tests/test_coverage.py` line 262 still builds a `custom.lightroom_id` metafield in its fixture. It is harmless, since the coverage list no longer reads it, but it is a leftover; I left it alone because this reconcile only edits the HANDOFF. (2) The stale duplicate wrapper `~/Claude/scheduled/launchd/scripts/lc-facts-reconcile-scheduled.sh` flagged on 2026-08-15 is still on disk (last modified 30 Sep 07:30); I did not compare it with the deployed copy, so whether it still diverges is unchecked. (3) The `facts-library-reliability-sweep/test_cross_layer.py` failure noted in the same entry is outside this repo and was not re-run.
+
 ## 2026-09-30 — LOS7-3081: this repo is public, so its docs no longer name the token file or a 1Password item
 
 Brett kept the repo public (secret scanning on and clean) on the condition that DEPLOYMENT.md stops naming the service-account token path and 1Password references. Done: the wrapper description, the manual pre-flight example, the troubleshooting line and the June `read_metaobjects` note now describe them without paths or item IDs, and the README examples use a placeholder template. The scheduled run itself changed the same day: it loads the read-only token (no read-write fallback) and a per-job env template (`SHOPIFY_STORE` plus the App A client pair) that lives in the private scheduled repo, instead of dawn's whole `.env.tpl`. Three code strings still point at dawn's template for manual runs; they name no credential and were left.
@@ -60,7 +69,7 @@ Rather than strip co-ordinates off a public field to force a prefix match, the p
 
 **Verified end-to-end, and the guard still bites.** Full scheduled run after the change: 3 R0-live from the same 122 series / 1,961 products, so coverage did not shrink. `mount-russell-grain-silo` still fires and is GENUINE — its live metaobject claims "Inverell Shire, Northern Tablelands" where the research file says North West Slopes and never states the LGA (checked the whole file, not just the At-a-glance table: "Inverell Shire" appears 7 times but only as *Council*, in custodian context). That finding is the proof the fix did not blind the detector.
 
-**Brett-action: one decision, in LOS7-2098.** mount-russell's live location either gets its LGA/region sourced into the research file with citations, or the unsourced terms come off the live metaobject. Both are almost certainly true facts, which is exactly the trap — Rule 0 makes the library the ceiling, not plausibility.
+**Brett-action: one decision, in LOS7-2098.** ~~(struck 2026-10-18: answered and closed, see the 2026-08-15 LOS7-2098 entry above)~~ mount-russell's live location either gets its LGA/region sourced into the research file with citations, or the unsourced terms come off the live metaobject. Both are almost certainly true facts, which is exactly the trap — Rule 0 makes the library the ceiling, not plausibility.
 
 **Also logged in LOS7-2098, not fixed here:** `ashio-copper-mine` is a FALSE positive hiding a real parser bug — its research file carries two `| Location |` rows and live matches the `[S1]` one verbatim, but `_parse_at_a_glance` builds a plain dict so the second row silently overwrites the first. Any duplicated At-a-glance key discards a sourced row. The fix needs a small data-model change (a key holding candidate values, `_classify` agreeing if live matches ANY) rather than an arbitrary first-or-last, so it was not rushed into the same session as a supersession change to the Rule-0 guard.
 
