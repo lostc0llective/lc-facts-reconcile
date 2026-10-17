@@ -259,7 +259,6 @@ class TestAnalyseProduct:
             make_mf("custom", "capture_date", "2019-04-15"),
             make_mf("custom", "alt_text", "The turbine hall at Wangi Power Station."),
             make_mf("custom", "subject_description", "A broad view of the turbine hall."),
-            make_mf("custom", "lightroom_id", "lr-001"),
             make_mf("custom", "lr_sync_at", "2026-05-01T00:00:00Z"),
             # Bespoke tier
             make_mf("custom", "print_story", "This photograph was made on a winter morning."),
